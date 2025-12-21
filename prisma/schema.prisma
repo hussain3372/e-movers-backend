@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                     Int        @id @default(autoincrement())
+  email                  String     @unique
+  password               String
+  name                   String
+  firstName              String?
+  lastName               String?
+  phone                  String?
+  role                   UserRole   @default(USER)
+  status                 UserStatus @default(PENDING_VERIFICATION)
+  emailVerified          Boolean    @default(false)
+  emailVerificationToken String?
+  resetPasswordToken     String?
+  resetPasswordExpires   DateTime?
+  mfaEnabled             Boolean    @default(false)
+  mfaSecret              String?
+  lastLoginAt            DateTime?
+  googleId               String?    @unique
+  profilePicture         String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  isEmail                Boolean    @default(true)
+  isNotification         Boolean    @default(true)
+  fcmToken               String?
+
+  notifications Notification[]
+  twoFA         TwoFA?
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model TwoFA {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @unique
+  otp        String
+  expiresAt  DateTime
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("two_fa")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    Int
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  read      Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum NotificationType {
+  SYSTEM
+  USER
+  ADMIN
+}
+
+model AuditLog {
+  id         Int       @id @default(autoincrement())
+  userId     Int?
+  action     String
+  resource   String
+  resourceId String?
+  ipAddress  String?
+  userAgent  String?
+  oldValues  String?  // Stored as JSON string
+  newValues  String?  // Stored as JSON string
+  metadata   String?  // Stored as JSON string
+  severity   AuditSeverity
+  status     AuditStatus
+  createdAt  DateTime  @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  logo        String
+  title       String
+  description String
+  type        ServiceType
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@map("services")
+}
+
+// Add this to your schema.prisma file
+
+model Booking {
+  id          String   @id @default(cuid())
+  logo        String?  // URL to the logo image (optional)
+  type        BookingType // MOVING or STORAGE
+  
+  // Moving booking fields
+  serviceType      String?  // For MOVING: type of moving service
+  preferredDate    DateTime? // For MOVING: preferred date
+  pickupLocation   String?  // For MOVING: pickup location
+  dropOffLocation  String?  // For MOVING: drop-off location
+  isCompany        Boolean? // For MOVING: true = Company, false = Individual
+  
+  // Storage booking fields
+  storageType      String?  // For STORAGE: type of storage
+  rentalPlan       String?  // For STORAGE: rental plan
+  storageSize      String?  // For STORAGE: storage size
+  location         String?  // For STORAGE: storage location
+  isBusiness       Boolean? // For STORAGE: business user
+  isHometown       Boolean? // For STORAGE: hometown user
+  isStudent        Boolean? // For STORAGE: student user
+  
+  // Common fields
+  comments         String?  // Optional comments for both types
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@map("bookings")
+}
+
+enum BookingType {
+  MOVING
+  STORAGE
+}
+
+enum ServiceType {
+  MOVING
+  STORAGE
+}
+
+enum AuditSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILED
+  PARTIAL
+}
