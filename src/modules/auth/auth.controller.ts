@@ -26,12 +26,13 @@ import { Public } from './decorators/public.decorator';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { CurrentUserType } from './decorators/current-user.decorator';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
-    private googleAuthService: GoogleAuthService
+    private googleAuthService: GoogleAuthService,
   ) {}
 
   @Public()
@@ -69,7 +70,7 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(
-    @Body(ValidationPipe) forgotPasswordDto: ForgotPasswordDto
+    @Body(ValidationPipe) forgotPasswordDto: ForgotPasswordDto,
   ) {
     return this.authService.forgotPassword(forgotPasswordDto);
   }
@@ -78,19 +79,18 @@ export class AuthController {
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(
-    @Body(ValidationPipe) resetPasswordDto: ResetPasswordDto
+    @Body(ValidationPipe) resetPasswordDto: ResetPasswordDto,
   ) {
     return this.authService.resetPassword(resetPasswordDto);
   }
 
-  @Public()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  async verifyEmail(@Body('token') token: string) {
-    if (!token) {
-      throw new BadRequestException('Verification token is required');
-    }
-    return this.authService.verifyEmail(token);
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(
+      verifyEmailDto.email,
+      verifyEmailDto.otp,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -98,7 +98,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async changePassword(
     @CurrentUser() user: CurrentUserType,
-    @Body(ValidationPipe) changePasswordDto: ChangePasswordDto
+    @Body(ValidationPipe) changePasswordDto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(user.id, changePasswordDto);
   }
@@ -156,12 +156,12 @@ export class AuthController {
   async googleCallback(@Body(ValidationPipe) googleAuthDto: GoogleAuthDto) {
     // Step 1: Verify Google token
     const googleUser = await this.googleAuthService.verifyToken(
-      googleAuthDto.token
+      googleAuthDto.token,
     );
 
     // Step 2: Check if user exists
     const existingUser = await this.authService.findUserByEmail(
-      googleUser.email
+      googleUser.email,
     );
 
     if (existingUser) {
@@ -171,7 +171,7 @@ export class AuthController {
         await this.authService.updateGoogleId(
           existingUser.id,
           googleUser.sub,
-          googleUser.picture
+          googleUser.picture,
         );
       }
 

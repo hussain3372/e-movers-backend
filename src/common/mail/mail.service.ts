@@ -18,7 +18,7 @@ export class MailService {
       const port = this.configService.get<number>('MAIL_PORT');
       const encryption = this.configService.get<string>(
         'MAIL_ENCRYPTION',
-        'ssl'
+        'ssl',
       );
       const username = this.configService.get<string>('MAIL_USERNAME');
       const password = this.configService.get<string>('MAIL_PASSWORD');
@@ -68,7 +68,7 @@ export class MailService {
           port,
           secure,
           encryption,
-        }
+        },
       );
     } catch (error) {
       this.logger.error('❌ Failed to initialize email transporter', error);
@@ -92,7 +92,7 @@ export class MailService {
           options.from ||
           this.configService.get<string>(
             'MAIL_FROM_ADDRESS',
-            'developer@vordx.com'
+            'developer@vordx.com',
           );
 
         const mailOptions = {
@@ -123,18 +123,18 @@ export class MailService {
               to: options.to,
               subject: options.subject,
               error: errorMsg,
-            }
+            },
           );
           return false;
         }
 
         this.logger.warn(
           `⚠️ Email send attempt ${attempt}/${maxRetries} failed, retrying in ${retryDelayMs}ms: ${errorMsg}`,
-          { to: options.to, subject: options.subject }
+          { to: options.to, subject: options.subject },
         );
 
         // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
       }
     }
 
@@ -144,18 +144,18 @@ export class MailService {
   async sendEmailVerification(
     email: string,
     token: string,
-    firstName?: string
+    firstName?: string,
   ): Promise<boolean> {
     const subject = 'Verify Your Email Address';
     const verifyUrl = `${this.configService.get<string>(
       'FRONTEND_URL',
-      'https://rental-host-dynamic.vercel.app'
+      'http://localhost:3000',
     )}/verify-email?token=${token}`;
 
     const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2>Hello ${firstName || ''},</h2>
-      <p>Thank you for registering with the Rental Host Certification Platform.</p>
+      <p>Thank you for registering with the E House Movers Platform.</p>
       <p>Please verify your email address by clicking the button below:</p>
       <div style="margin: 20px 0;">
         <a href="${verifyUrl}" 
@@ -165,7 +165,7 @@ export class MailService {
         </a>
       </div>
       <p>If you didn’t create an account, you can safely ignore this email.</p>
-      <p>Best regards,<br>Rental Host Certification Team</p>
+      <p>Best regards,<br>E House Movers Team</p>
     </div>
   `;
 
@@ -178,7 +178,7 @@ export class MailService {
     console.log('   → SMTP Port:', this.configService.get<string>('MAIL_PORT'));
     console.log(
       '   → SMTP User:',
-      this.configService.get<string>('MAIL_USERNAME')
+      this.configService.get<string>('MAIL_USERNAME'),
     );
 
     try {
@@ -193,6 +193,43 @@ export class MailService {
     } catch (error) {
       console.error('❌ Email send failed:', error.message);
       console.error(error);
+      return false;
+    }
+  }
+
+  async sendEmailVerificationOTP(
+    email: string,
+    otp: string,
+    firstName?: string,
+  ): Promise<boolean> {
+    const subject = 'Your Email Verification Code';
+
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Hello ${firstName || ''},</h2>
+      <p>Your email verification code is:</p>
+
+      <div style="font-size: 28px; font-weight: bold; letter-spacing: 6px; 
+                  background: #f3f4f6; padding: 12px; text-align: center;">
+        ${otp}
+      </div>
+
+      <p>This code will expire in <strong>10 minutes</strong>.</p>
+      <p>If you did not create this account, please ignore this email.</p>
+
+      <p>Best regards,<br/>E House Movers Team</p>
+    </div>
+  `;
+
+    try {
+      await this.sendMail({
+        to: email,
+        subject,
+        html,
+      });
+      return true;
+    } catch (error) {
+      console.error('Email OTP send failed:', error);
       return false;
     }
   }
@@ -215,14 +252,14 @@ export class MailService {
   async sendPasswordResetEmail(
     email: string,
     resetToken: string,
-    role: string // 👈 add role parameter
+    role: string, // 👈 add role parameter
   ): Promise<boolean> {
     const subject = 'Password Reset Request';
 
     // Base frontend URL from env or default
     const baseUrl = this.configService.get<string>(
       'FRONTEND_URL',
-      'http://localhost:3000'
+      'http://localhost:3000',
     );
 
     // ✅ Determine route prefix based on role
@@ -246,7 +283,7 @@ export class MailService {
       </div>
       <p>This link will expire in 1 hour.</p>
       <p>If you did not request this reset, please ignore this email.</p>
-      <p>Best regards,<br>Rental Host Certification Team</p>
+      <p>Best regards,<br>E House Movers Team</p>
     </div>
   `;
 
@@ -255,54 +292,86 @@ export class MailService {
 
   async sendAdminWelcomeEmail(
     email: string,
-    name: string,
-    password: string
-  ): Promise<boolean> {
-    const platformUrl =
-      process.env.FRONTEND_URL || 'http://localhost:3000';
-    const loginUrl = `${platformUrl}/admin/auth/login`;
-    const subject =
-      'Welcome to Rental Host Certification Platform - Admin Access';
+    firstName: string,
+    temporaryPassword: string,
+  ): Promise<void> {
+    const subject = 'Welcome to Admin Panel';
     const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Welcome to Rental Host Certification Platform!</h2>
-          <p>Hello ${name},</p>
-          <p>You have been granted <strong>Admin</strong> access to the Rental Host Certification Platform.</p>
-          
-          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
-            <h3 style="margin-top: 0;">Your Login Credentials:</h3>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Temporary Password:</strong> <code style="background-color: #fff; padding: 5px 10px; border-radius: 3px;">${password}</code></p>
-            <p><strong>Platform URL:</strong> <a href="${loginUrl}">${loginUrl}</a></p>
-          </div>
-          
-          <p><strong>Important:</strong> Please change your password after your first login for security purposes.</p>
-          
-          <div style="margin-top: 30px;">
-            <a href="${loginUrl}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
-              Login to Platform
-            </a>
-          </div>
-          
-          <p style="margin-top: 30px; color: #666; font-size: 14px;">
-            If you have any questions or need assistance, please contact our support team.
-          </p>
-          
-          <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-          <p style="color: #999; font-size: 12px;">
-            This is an automated email. Please do not reply to this message.
-          </p>
-        </div>
-      `;
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Welcome to the Admin Panel!</h2>
+      <p>Hi ${firstName},</p>
+      <p>You have been added as an administrator. Here are your login credentials:</p>
+      <div style="background-color: #f5f5f5; padding: 20px; margin: 20px 0; border-left: 4px solid #4CAF50;">
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Temporary Password:</strong> ${temporaryPassword}</p>
+      </div>
+      <p><strong>Important:</strong> Please change your password after your first login for security purposes.</p>
+      <p>You can login at: <a href="${process.env.FRONTEND_URL}/admin/login">Admin Login</a></p>
+      <br>
+      <p>Best regards,<br>Your Team</p>
+    </div>
+  `;
 
-    return this.sendMail({ to: email, subject, html });
+    await this.sendMail({ to: email, subject, html });
+  }
+
+  async sendNewAdminNotificationEmail(
+    email: string,
+    firstName: string,
+    newAdminData: { name: string; email: string; addedBy: string },
+  ): Promise<void> {
+    const subject = 'New Admin Added - Notification';
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>New Admin Added</h2>
+      <p>Hi ${firstName},</p>
+      <p>This is to inform you that a new administrator has been added to the system.</p>
+      <div style="background-color: #f5f5f5; padding: 20px; margin: 20px 0; border-left: 4px solid #2196F3;">
+        <p><strong>Admin Name:</strong> ${newAdminData.name}</p>
+        <p><strong>Admin Email:</strong> ${newAdminData.email}</p>
+        <p><strong>Added By:</strong> ${newAdminData.addedBy}</p>
+        <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+      </div>
+      <p>This is an automated notification for your attention.</p>
+      <br>
+      <p>Best regards,<br>System Administrator</p>
+    </div>
+  `;
+
+    await this.sendMail({ to: email, subject, html });
+  }
+
+  async sendAdminDeletedNotificationEmail(
+    email: string,
+    firstName: string,
+    deletedAdminData: { name: string; email: string; deletedBy: string },
+  ): Promise<void> {
+    const subject = 'Admin Account Deleted - Notification';
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Admin Account Deleted</h2>
+      <p>Hi ${firstName},</p>
+      <p>This is to inform you that an administrator account has been deleted from the system.</p>
+      <div style="background-color: #fff3cd; padding: 20px; margin: 20px 0; border-left: 4px solid #ff9800;">
+        <p><strong>Admin Name:</strong> ${deletedAdminData.name}</p>
+        <p><strong>Admin Email:</strong> ${deletedAdminData.email}</p>
+        <p><strong>Deleted By:</strong> ${deletedAdminData.deletedBy}</p>
+        <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+      </div>
+      <p>This is an automated notification for your attention.</p>
+      <br>
+      <p>Best regards,<br>System Administrator</p>
+    </div>
+  `;
+
+    await this.sendMail({ to: email, subject, html });
   }
 
   async sendCertificationApprovedEmail(
     email: string,
     hostName: string,
     propertyName: string,
-    badgeSerial: string
+    badgeSerial: string,
   ): Promise<boolean> {
     const subject = 'Certification Approved - Digital Badge Ready';
     const html = `
@@ -319,7 +388,7 @@ export class MailService {
             Download Badge
           </a>
         </div>
-        <p>Best regards,<br>Rental Host Certification Team</p>
+        <p>Best regards,<br>E House Movers Team</p>
       </div>
     `;
 
@@ -330,7 +399,7 @@ export class MailService {
     email: string,
     hostName: string,
     propertyName: string,
-    reviewNotes: string
+    reviewNotes: string,
   ): Promise<boolean> {
     const subject = 'Certification Application Update';
     const html = `
@@ -349,7 +418,7 @@ export class MailService {
             Update Application
           </a>
         </div>
-        <p>Best regards,<br>Rental Host Certification Team</p>
+        <p>Best regards,<br>E House Movers Team</p>
       </div>
     `;
 
@@ -360,7 +429,7 @@ export class MailService {
     email: string,
     hostName: string,
     propertyName: string,
-    daysUntilExpiry: number
+    daysUntilExpiry: number,
   ): Promise<boolean> {
     const subject = `Certification Expiring Soon - ${daysUntilExpiry} Days Remaining`;
     const html = `
@@ -374,7 +443,7 @@ export class MailService {
             Renew Certification
           </a>
         </div>
-        <p>Best regards,<br>Rental Host Certification Team</p>
+        <p>Best regards,<br>E House Movers Team</p>
       </div>
     `;
 
@@ -384,7 +453,7 @@ export class MailService {
   async sendCertificationExpiredEmail(
     email: string,
     hostName: string,
-    propertyName: string
+    propertyName: string,
   ): Promise<boolean> {
     const subject = 'Certification Expired - Action Required';
     const html = `
@@ -398,7 +467,7 @@ export class MailService {
             Renew Certification
           </a>
         </div>
-        <p>Best regards,<br>Rental Host Certification Team</p>
+        <p>Best regards,<br>E House Movers Team</p>
       </div>
     `;
 
@@ -464,7 +533,7 @@ export class MailService {
       const port = this.configService.get<number>('MAIL_PORT');
       const encryption = this.configService.get<string>(
         'MAIL_ENCRYPTION',
-        'tls'
+        'tls',
       );
       const secure = port === 465 || encryption?.toLowerCase() === 'ssl';
 
@@ -477,7 +546,7 @@ export class MailService {
           host: host || '',
           port: port || 587,
           secure,
-          encryption: encryption || 'tls'
+          encryption: encryption || 'tls',
         },
       };
     } catch (error) {
@@ -486,13 +555,13 @@ export class MailService {
       const port = this.configService.get<number>('MAIL_PORT');
       const encryption = this.configService.get<string>(
         'MAIL_ENCRYPTION',
-        'tls'
+        'tls',
       );
       const secure = port === 465 || encryption?.toLowerCase() === 'ssl';
 
       this.logger.error(
         `📋 SMTP Connection Diagnostic:`,
-        `Host: ${host}, Port: ${port}, Secure: ${secure}, Encryption: ${encryption}, Error: ${errorMsg}`
+        `Host: ${host}, Port: ${port}, Secure: ${secure}, Encryption: ${encryption}, Error: ${errorMsg}`,
       );
 
       return {
@@ -502,7 +571,7 @@ export class MailService {
           host: host || '',
           port: port || 587,
           secure,
-          encryption: encryption || 'tls'
+          encryption: encryption || 'tls',
         },
       };
     }
@@ -513,7 +582,7 @@ export class MailService {
     userName: string,
     title: string,
     description: string,
-    data?: { announcementId?: string | number; imageUrl?: string }
+    data?: { announcementId?: string | number; imageUrl?: string },
   ): Promise<boolean> {
     const subject = `New Announcement: ${title}`;
 
@@ -548,12 +617,12 @@ export class MailService {
         
         <p style="color: #6b7280; font-size: 14px; margin: 20px 0 0 0;">
           Best regards,<br>
-          <strong>Rental Host Certification Team</strong>
+          <strong>E House Movers Team</strong>
         </p>
       </div>
       
       <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-        <p>© ${new Date().getFullYear()} Rental Host Certification Platform. All rights reserved.</p>
+        <p>© ${new Date().getFullYear()} E House Movers Platform. All rights reserved.</p>
         <p>This is an automated email. Please do not reply to this message.</p>
       </div>
     </div>
@@ -571,8 +640,6 @@ export class MailService {
     }
   }
 
-
-
   async sendPaymentConfirmationEmail(
     email: string,
     hostName: string,
@@ -580,7 +647,7 @@ export class MailService {
     amount: number,
     currency: string,
     applicationId: string,
-    transactionId: string
+    transactionId: string,
   ): Promise<boolean> {
     const subject = 'Payment Confirmed - Certification Application';
 
@@ -601,7 +668,7 @@ export class MailService {
       
       <p>Your application is now in the submission phase. Our team will review your application and you will receive updates via email.</p>
       
-      <p style="margin-top: 30px;">Best regards,<br><strong>Rental Host Certification Team</strong></p>
+      <p style="margin-top: 30px;">Best regards,<br><strong>E House Movers Team</strong></p>
     </div>
   `;
 
@@ -626,7 +693,7 @@ export class MailService {
     id: string;
     serviceType: string;
     preferredDate: string;
-    pickupLocation: string; 
+    pickupLocation: string;
     dropOffLocation: string;
     isCompany: boolean;
     comments?: string;
@@ -641,12 +708,14 @@ export class MailService {
         <div style="margin-top: 20px;">
           <p style="margin: 10px 0;"><strong>Booking ID:</strong> ${bookingData.id}</p>
           <p style="margin: 10px 0;"><strong>Service Type:</strong> ${bookingData.serviceType.toUpperCase()}</p>
-          <p style="margin: 10px 0;"><strong>Preferred Date:</strong> ${new Date(bookingData.preferredDate).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })}</p>
+          <p style="margin: 10px 0;"><strong>Preferred Date:</strong> ${new Date(
+            bookingData.preferredDate,
+          ).toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}</p>
           <p style="margin: 10px 0;"><strong>Pickup Location:</strong> ${bookingData.pickupLocation}</p>
           <p style="margin: 10px 0;"><strong>Drop-off Location:</strong> ${bookingData.dropOffLocation}</p>
           <p style="margin: 10px 0;"><strong>Client Type:</strong> ${bookingData.isCompany ? 'Company' : 'Individual'}</p>
@@ -735,4 +804,3 @@ export class MailService {
     await this.sendMail({ to: bookingData.email, subject, html });
   }
 }
-

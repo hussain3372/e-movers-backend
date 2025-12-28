@@ -12,6 +12,9 @@ import { S3Module } from './modules/s3module/s3.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { MovingServiceModule } from './modules/movingservice/movingservice.module';
 import { BookingModule } from './modules/bookings/booking.module';
+import { ServiceLocationsModule } from './modules/servicelocations/service-locations.module';
+import { PostersModule } from './modules/posters/posters.module';
+import { UserManagementModule } from './modules/usermanagement/user-management.module';
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { BookingModule } from './modules/bookings/booking.module';
     ProfileModule,
     MovingServiceModule,
     BookingModule,
+    ServiceLocationsModule,
+    PostersModule,
+    UserManagementModule,
   ],
   controllers: [AppController],
   providers: [AppService],

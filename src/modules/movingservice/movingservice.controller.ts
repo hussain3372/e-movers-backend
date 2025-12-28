@@ -18,18 +18,25 @@ import {
   FileTypeValidator,
   BadRequestException,
   Put,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MovingServiceService } from './movingservice.service';
 import { CreateServiceDto, ServiceType } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { UserRole } from '@prisma/client';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @Controller('movingservice')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class MovingServiceController {
-  constructor(private readonly movingServiceService: MovingServiceService) { }
+  constructor(private readonly movingServiceService: MovingServiceService) {}
 
   // POST /movingservice - Create a new service with logo upload
   @Post()
+  @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(FileInterceptor('logo'))
   async create(
@@ -65,7 +72,9 @@ export class MovingServiceController {
   // GET /movingservice?type=MOVING | STORAGE | (no type = all)
   @Get()
   async findByType(@Query('type') type?: ServiceType) {
-    const data = await this.movingServiceService.findByType(type as ServiceType);
+    const data = await this.movingServiceService.findByType(
+      type as ServiceType,
+    );
 
     return {
       data,
@@ -73,7 +82,6 @@ export class MovingServiceController {
       status: HttpStatus.OK,
     };
   }
-
 
   // GET /movingservice/:id - Get a single service by ID
   @Get(':id')
@@ -83,6 +91,7 @@ export class MovingServiceController {
 
   // PUT /movingservice/:id - Update a service (type is required, logo is optional)
   @Put(':id')
+  @Roles(UserRole.ADMIN)
   @UseInterceptors(FileInterceptor('logo'))
   async update(
     @Param('id') id: string,
@@ -118,6 +127,7 @@ export class MovingServiceController {
 
   // DELETE /movingservice/:id - Delete a service
   @Delete(':id')
+  @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
   async remove(
     @Param('id') id: string,

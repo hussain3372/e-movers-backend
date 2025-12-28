@@ -157,6 +157,30 @@ model Booking {
   @@map("bookings")
 }
 
+model ServiceLocation {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  imageUrl    String
+  createdBy   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("service_locations")
+}
+
+model Poster {
+  id         Int      @id @default(autoincrement())
+  imageUrl   String
+  fileName   String
+  fileSize   Int
+  uploadedBy Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("posters")
+}
+
 enum BookingType {
   MOVING
   STORAGE

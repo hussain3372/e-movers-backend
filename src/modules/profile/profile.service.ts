@@ -34,6 +34,7 @@ export class ProfileService {
         email: true,
         role: true,
         emailVerified: true,
+        phone: true,
         firstName: true,
         lastName: true,
         profilePicture: true,
