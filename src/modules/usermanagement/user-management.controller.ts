@@ -33,7 +33,7 @@ import { UserRole } from '@prisma/client';
 @ApiBearerAuth()
 @Controller('admin/user-management')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
+@Roles(UserRole.ADMIN, UserRole.USER)
 export class UserManagementController {
   constructor(private readonly userManagementService: UserManagementService) {}
 
