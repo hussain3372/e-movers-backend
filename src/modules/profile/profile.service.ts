@@ -57,6 +57,7 @@ export class ProfileService {
         firstName: dto.firstName ?? existingUser.firstName,
         lastName: dto.lastName ?? existingUser.lastName,
         email: dto.email ?? existingUser.email,
+        phone: dto.phone ?? existingUser.phone,
         profilePicture: dto.profilePicture ?? existingUser.profilePicture,
       },
       select: {
@@ -64,6 +65,7 @@ export class ProfileService {
         email: true,
         role: true,
         emailVerified: true,
+        phone: true,
         firstName: true,
         lastName: true,
         profilePicture: true,

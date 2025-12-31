@@ -27,7 +27,7 @@ export class PostersController {
   constructor(private readonly postersService: PostersService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.USER)
   @ApiOperation({ summary: 'Upload a new poster' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

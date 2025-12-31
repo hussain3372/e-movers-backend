@@ -9,8 +9,8 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 @Injectable()
 export class MovingServiceService {
   private readonly logger = new Logger(MovingServiceService.name);
-  
-  // Validation settings for service logos
+
+  // File validation settings
   private readonly logoValidation = {
     maxSize: 5 * 1024 * 1024, // 5MB
     allowedTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'],
@@ -22,18 +22,19 @@ export class MovingServiceService {
     private readonly storage: StorageService,
     private readonly audit: AuditService,
   ) {}
-
-  async create(
-    createServiceDto: CreateServiceDto,
+  
+  private async handleFileUpload(
     file: Express.Multer.File,
+    folder: string,
     userId: string,
     userEmail: string,
     userRole: string,
   ) {
-    // Upload logo to S3
+    if (!file) return null;
+
     const uploadResult = await this.storage.uploadFile(
       file,
-      `services/${createServiceDto.type.toLowerCase()}`,
+      folder,
       userId,
       userEmail,
       userRole.toLowerCase(),
@@ -44,39 +45,75 @@ export class MovingServiceService {
       },
     );
 
-    // Create service with uploaded logo URL
+    return uploadResult;
+  }
+
+  async create(
+    createServiceDto: CreateServiceDto,
+    files: { logo?: Express.Multer.File; bannerImg?: Express.Multer.File },
+    userId: string,
+    userEmail: string,
+    userRole: string,
+  ) {
+    const folder = `services/${createServiceDto.type.toLowerCase()}`;
+
+    const logoFile = files?.logo ?? null;
+    const bannerFile = files?.bannerImg ?? null;
+
+    const logoUpload = logoFile ? await this.handleFileUpload(logoFile, folder, userId, userEmail, userRole) : null;
+    const bannerUpload = bannerFile ? await this.handleFileUpload(bannerFile, folder, userId, userEmail, userRole) : null;
+
     const service = await this.prisma.service.create({
       data: {
-        logo: uploadResult.url,
+        logo: logoUpload?.url || '',
+        bannerImg: bannerUpload?.url || '',
         title: createServiceDto.title,
+        heading: createServiceDto.heading,
+        shortdescription: createServiceDto.shortdescription,
         description: createServiceDto.description,
+        features: createServiceDto.features,
         type: createServiceDto.type,
       },
     });
 
-    // Audit the creation
-    await this.audit.auditFileOperation(
-      'SERVICE_LOGO_UPLOAD',
-      service.id,
-      userId,
-      userEmail,
-      userRole.toLowerCase(),
-      {
-        fileSize: uploadResult.size,
-        originalName: file.originalname,
-        url: uploadResult.url,
-        serviceType: service.type,
-      },
-    );
+    if (logoUpload && logoFile) {
+      await this.audit.auditFileOperation(
+        'SERVICE_LOGO_UPLOAD',
+        service.id,
+        userId,
+        userEmail,
+        userRole.toLowerCase(),
+        {
+          fileSize: logoUpload.size,
+          originalName: logoFile.originalname,
+          url: logoUpload.url,
+          serviceType: service.type,
+        },
+      );
+    }
 
-    this.logger.log(
-      `Service created with ID: ${service.id}, Type: ${service.type}`,
-      {
-        serviceId: service.id,
-        type: service.type,
-        fileSize: uploadResult.size,
-      },
-    );
+    if (bannerUpload && bannerFile) {
+      await this.audit.auditFileOperation(
+        'SERVICE_BANNER_UPLOAD',
+        service.id,
+        userId,
+        userEmail,
+        userRole.toLowerCase(),
+        {
+          fileSize: bannerUpload.size,
+          originalName: bannerFile.originalname,
+          url: bannerUpload.url,
+          serviceType: service.type,
+        },
+      );
+    }
+
+    this.logger.log(`Service created with ID: ${service.id}`, {
+      serviceId: service.id,
+      type: service.type,
+      logoSize: logoUpload?.size || 0,
+      bannerSize: bannerUpload?.size || 0,
+    });
 
     return service;
   }
@@ -86,19 +123,12 @@ export class MovingServiceService {
       where: { type },
       orderBy: { createdAt: 'desc' },
     });
-
     return services;
   }
 
   async findOne(id: string) {
-    const service = await this.prisma.service.findUnique({
-      where: { id },
-    });
-
-    if (!service) {
-      throw new NotFoundException(`Service with ID ${id} not found`);
-    }
-
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) throw new NotFoundException(`Service with ID ${id} not found`);
     return service;
   }
 
@@ -110,69 +140,48 @@ export class MovingServiceService {
     userEmail: string,
     userRole: string,
   ) {
-    // Check if service exists
     const existingService = await this.findOne(id);
 
     let logoUrl = existingService.logo;
 
-    // If a new logo file is provided, upload it
     if (file) {
-      const uploadResult = await this.storage.uploadFile(
-        file,
-        `services/${updateServiceDto.type.toLowerCase()}`,
-        userId,
-        userEmail,
-        userRole.toLowerCase(),
-        {
-          maxSize: this.logoValidation.maxSize,
-          allowedTypes: this.logoValidation.allowedTypes,
-          allowedExtensions: this.logoValidation.allowedExtensions,
-        },
-      );
+      const folder = `services/${updateServiceDto.type.toLowerCase()}`;
+      const uploadResult = await this.handleFileUpload(file, folder, userId, userEmail, userRole);
 
-      logoUrl = uploadResult.url;
+      if (uploadResult) {
+        logoUrl = uploadResult.url;
 
-      // Delete old logo from S3
-      if (existingService.logo) {
-        try {
+        if (existingService.logo) {
           const oldKey = this.extractKeyFromUrl(existingService.logo);
-          if (oldKey) {
-            await this.storage.deleteFile(oldKey);
-          }
-        } catch (error) {
-          this.logger.warn(
-            `Failed to delete old logo: ${error.message}`,
-            'MovingServiceService',
-          );
+          if (oldKey) await this.storage.deleteFile(oldKey);
         }
-      }
 
-      // Audit the logo update
-      await this.audit.auditFileOperation(
-        'SERVICE_LOGO_UPDATE',
-        id,
-        userId,
-        userEmail,
-        userRole.toLowerCase(),
-        {
-          fileSize: uploadResult.size,
-          originalName: file.originalname,
-          url: uploadResult.url,
-          serviceType: updateServiceDto.type,
-        },
-      );
+        await this.audit.auditFileOperation(
+          'SERVICE_LOGO_UPDATE',
+          id,
+          userId,
+          userEmail,
+          userRole.toLowerCase(),
+          {
+            fileSize: uploadResult.size,
+            originalName: file.originalname,
+            url: uploadResult.url,
+            serviceType: updateServiceDto.type,
+          },
+        );
+      }
     }
 
-    // Update service
     const updatedService = await this.prisma.service.update({
       where: { id },
       data: {
         logo: logoUrl,
         ...(updateServiceDto.title && { title: updateServiceDto.title }),
-        ...(updateServiceDto.description && {
-          description: updateServiceDto.description,
-        }),
-        type: updateServiceDto.type, // Type is required
+        ...(updateServiceDto.heading && { heading: updateServiceDto.heading }),
+        ...(updateServiceDto.description && { description: updateServiceDto.description }),
+        ...(updateServiceDto.shortdescription && { shortdescription: updateServiceDto.shortdescription }),
+        ...(typeof updateServiceDto.features !== 'undefined' && { features: updateServiceDto.features }),
+        type: updateServiceDto.type,
       },
     });
 
@@ -185,30 +194,15 @@ export class MovingServiceService {
   }
 
   async remove(id: string, userId: string, userEmail: string, userRole: string) {
-    // Check if service exists
     const service = await this.findOne(id);
 
-    // Delete logo from S3
     if (service.logo) {
-      try {
-        const logoKey = this.extractKeyFromUrl(service.logo);
-        if (logoKey) {
-          await this.storage.deleteFile(logoKey);
-        }
-      } catch (error) {
-        this.logger.warn(
-          `Failed to delete logo during service deletion: ${error.message}`,
-          'MovingServiceService',
-        );
-      }
+      const logoKey = this.extractKeyFromUrl(service.logo);
+      if (logoKey) await this.storage.deleteFile(logoKey);
     }
 
-    // Delete the service
-    await this.prisma.service.delete({
-      where: { id },
-    });
+    await this.prisma.service.delete({ where: { id } });
 
-    // Audit the deletion
     await this.audit.auditFileOperation(
       'SERVICE_DELETE',
       id,
@@ -229,15 +223,10 @@ export class MovingServiceService {
     return { message: 'Service deleted successfully', id };
   }
 
-  /**
-   * Extract S3 key from URL
-   */
   private extractKeyFromUrl(url: string): string | null {
     try {
       const urlObj = new URL(url);
-      // For S3 URLs like: https://bucket.s3.region.amazonaws.com/key
-      // or https://cloudfront.net/key
-      let key = urlObj.pathname.substring(1); // Remove leading slash
+      const key = urlObj.pathname.substring(1);
       return key || null;
     } catch (error) {
       this.logger.error(`Failed to extract key from URL: ${url}`, error);

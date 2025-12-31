@@ -1,5 +1,4 @@
-
-import { IsEnum, IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsString, IsUrl } from 'class-validator';
 
 export enum ServiceType {
   MOVING = 'MOVING',
@@ -13,9 +12,21 @@ export class CreateServiceDto {
 
   @IsNotEmpty()
   @IsString()
+  heading: string;
+
+  @IsNotEmpty()
+  @IsString()
+  shortdescription: string;
+
+  @IsNotEmpty()
+  @IsString()
   description: string;
 
   @IsNotEmpty()
   @IsEnum(ServiceType)
   type: ServiceType;
+
+  @IsNotEmpty()
+  @IsArray()
+  features: string[];
 }
