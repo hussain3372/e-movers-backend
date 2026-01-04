@@ -15,6 +15,7 @@ import { BookingModule } from './modules/bookings/booking.module';
 import { ServiceLocationsModule } from './modules/servicelocations/service-locations.module';
 import { PostersModule } from './modules/posters/posters.module';
 import { UserManagementModule } from './modules/usermanagement/user-management.module';
+import { StorageSizeModule } from './modules/storage-size/storage-size.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UserManagementModule } from './modules/usermanagement/user-management.m
     ServiceLocationsModule,
     PostersModule,
     UserManagementModule,
+    StorageSizeModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -180,88 +180,88 @@ export class UserManagementService {
     return user;
   }
 
-  async addAdmin(addAdminDto: AddAdminDto, currentAdmin: any) {
-    // Check if email already exists
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: addAdminDto.email.toLowerCase() },
-    });
+    async addAdmin(addAdminDto: AddAdminDto, currentAdmin: any) {
+      // Check if email already exists
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: addAdminDto.email.toLowerCase() },
+      });
 
-    if (existingUser) {
-      throw new ConflictException('User with this email already exists');
-    }
+      if (existingUser) {
+        throw new ConflictException('User with this email already exists');
+      }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(addAdminDto.password, 12);
+      // Hash password
+      const hashedPassword = await bcrypt.hash(addAdminDto.password, 12);
 
-    // Create admin user
-    const newAdmin = await this.prisma.user.create({
-      data: {
-        email: addAdminDto.email.toLowerCase(),
-        password: hashedPassword,
-        firstName: addAdminDto.firstName,
-        lastName: addAdminDto.lastName,
-        name: `${addAdminDto.firstName} ${addAdminDto.lastName}`.trim(),
-        phone: addAdminDto.phone,
-        role: UserRole.ADMIN,
-        status: UserStatus.ACTIVE,
-        emailVerified: true, // Admin accounts are pre-verified
-      },
-    });
-
-    // Get all other admins to notify them
-    const allAdmins = await this.prisma.user.findMany({
-      where: {
-        role: UserRole.ADMIN,
-        id: { not: newAdmin.id },
-        isEmail: true,
-      },
-      select: {
-        email: true,
-        firstName: true,
-        name: true,
-      },
-    });
-
-    // Send welcome email to new admin
-    await this.mailService.sendAdminWelcomeEmail(
-      newAdmin.email,
-      addAdminDto.firstName,
-      addAdminDto.password, // Send temp password
-    );
-
-    // Notify all other admins about new admin
-    const notificationPromises = allAdmins.map((admin) =>
-      this.mailService.sendNewAdminNotificationEmail(
-        admin.email,
-        admin.firstName || admin.name,
-        {
-          name: newAdmin.name,
-          email: newAdmin.email,
-          addedBy: currentAdmin.email,
+      // Create admin user
+      const newAdmin = await this.prisma.user.create({
+        data: {
+          email: addAdminDto.email.toLowerCase(),
+          password: hashedPassword,
+          firstName: addAdminDto.firstName,
+          lastName: addAdminDto.lastName,
+          name: `${addAdminDto.firstName} ${addAdminDto.lastName}`.trim(),
+          phone: addAdminDto.phone,
+          role: UserRole.ADMIN,
+          status: UserStatus.ACTIVE,
+          emailVerified: true, // Admin accounts are pre-verified
         },
-      ),
-    );
+      });
 
-    await Promise.all(notificationPromises);
+      // Get all other admins to notify them
+      const allAdmins = await this.prisma.user.findMany({
+        where: {
+          role: UserRole.ADMIN,
+          id: { not: newAdmin.id },
+          isEmail: true,
+        },
+        select: {
+          email: true,
+          firstName: true,
+          name: true,
+        },
+      });
 
-    this.logger.log(
-      `New admin created: ${newAdmin.email} by ${currentAdmin.email}`,
-      'UserManagementService',
-    );
+      // Send welcome email to new admin
+      await this.mailService.sendAdminWelcomeEmail(
+        newAdmin.email,
+        addAdminDto.firstName,
+        addAdminDto.password, // Send temp password
+      );
 
-    return {
-      status: 'success',
-      message: 'Admin created successfully and notifications sent',
-      admin: {
-        id: newAdmin.id,
-        email: newAdmin.email,
-        name: newAdmin.name,
-        firstName: newAdmin.firstName,
-        lastName: newAdmin.lastName,
-        role: newAdmin.role,
-      },
-    };
-  }
+      // Notify all other admins about new admin
+      const notificationPromises = allAdmins.map((admin) =>
+        this.mailService.sendNewAdminNotificationEmail(
+          admin.email,
+          admin.firstName || admin.name,
+          {
+            name: newAdmin.name,
+            email: newAdmin.email,
+            addedBy: currentAdmin.email,
+          },
+        ),
+      );
+
+      await Promise.all(notificationPromises);
+
+      this.logger.log(
+        `New admin created: ${newAdmin.email} by ${currentAdmin.email}`,
+        'UserManagementService',
+      );
+
+      return {
+        status: 'success',
+        message: 'Admin created successfully and notifications sent',
+        admin: {
+          id: newAdmin.id,
+          email: newAdmin.email,
+          name: newAdmin.name,
+          firstName: newAdmin.firstName,
+          lastName: newAdmin.lastName,
+          role: newAdmin.role,
+        },
+      };
+    }
 
   async updateUser(
     id: number,

@@ -34,6 +34,7 @@ model User {
   notifications Notification[]
   twoFA         TwoFA?
   auditLogs     AuditLog[]
+  bookings      Booking[]      // Add this line
 
   @@map("users")
 }
@@ -116,7 +117,7 @@ model Service {
   logo             String
   bannerImg        String   @default("")
   title            String
-  heading          String   @default("")
+  heading          String   @default("")  
   shortdescription String   @default("")
   description      String
   // Features stored as an array of strings
@@ -130,11 +131,10 @@ model Service {
 }
 
 
-// Add this to your schema.prisma file
-
 model Booking {
   id          String   @id @default(cuid())
-  logo        String?  // URL to the logo image (optional)
+  userId      Int?      
+  logo        String?  
   type        BookingType // MOVING or STORAGE
   
   // Moving booking fields
@@ -159,7 +159,10 @@ model Booking {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([type])
+  @@index([userId])
   @@map("bookings")
 }
 
@@ -185,6 +188,40 @@ model Poster {
   updatedAt  DateTime @updatedAt
 
   @@map("posters")
+}
+
+model StorageSizeOption {
+  id          String   @id @default(cuid())
+  size        String   // e.g., "10sqft", "20sqft", "50sqft"
+  title       String   // e.g., "Small Storage", "Medium Storage"
+  description String?  // Optional description
+  price       Float?   // Optional price
+  isActive    Boolean  @default(true)
+  displayOrder Int     @default(0) // For ordering options
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  features StorageSizeFeature[]
+
+  @@index([isActive])
+  @@index([displayOrder])
+  @@map("storage_size_options")
+}
+
+model StorageSizeFeature {
+  id        String   @id @default(cuid())
+  optionId  String
+  feature   String   // Feature description
+  isActive  Boolean  @default(true)
+  displayOrder Int   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  option StorageSizeOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@index([optionId])
+  @@index([isActive])
+  @@map("storage_size_features")
 }
 
 enum BookingType {

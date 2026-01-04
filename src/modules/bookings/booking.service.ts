@@ -1,5 +1,5 @@
 // booking/booking.service.ts
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '@/common/mail/mail.service';
 import type { CreateBookingDto } from './dto/create-booking.dto';
@@ -16,10 +16,7 @@ export class BookingService {
         private readonly mailService: MailService,
     ) { }
 
-    /**
-     * Create a new booking (Moving or Storage)
-     */
-    async create(createBookingDto: CreateBookingDto) {
+    async create(createBookingDto: CreateBookingDto, userId: number) {
         const bookingType =
             createBookingDto.service === ServiceType.MOVING ? 'MOVING' : 'STORAGE';
 
@@ -30,6 +27,7 @@ export class BookingService {
 
             bookingData = {
                 type: bookingType,
+                userId, // Add userId
                 logo: null,
 
                 serviceType: movingDto.serviceType,
@@ -39,7 +37,6 @@ export class BookingService {
                 isCompany: movingDto.isCompany,
                 comments: movingDto.comments ?? null,
 
-                // storage fields
                 storageType: null,
                 rentalPlan: null,
                 storageSize: null,
@@ -53,6 +50,7 @@ export class BookingService {
 
             bookingData = {
                 type: bookingType,
+                userId, // Add userId
                 logo: null,
 
                 storageType: storageDto.storageType,
@@ -64,7 +62,6 @@ export class BookingService {
                 isStudent: storageDto.isStudent ?? false,
                 comments: storageDto.comments ?? null,
 
-                // moving fields
                 serviceType: null,
                 preferredDate: null,
                 pickupLocation: null,
@@ -79,11 +76,10 @@ export class BookingService {
 
         this.logger.log(`Booking created`, {
             bookingId: booking.id,
+            userId: userId,
             type: booking.type,
         });
 
-
-        // ✅ Return only relevant fields
         return this.formatBookingResponse(booking);
     }
 
@@ -91,6 +87,7 @@ export class BookingService {
         if (booking.type === 'MOVING') {
             return {
                 id: booking.id,
+                userId: booking.userId,
                 type: booking.type,
                 serviceType: booking.serviceType,
                 preferredDate: booking.preferredDate,
@@ -105,6 +102,7 @@ export class BookingService {
         // STORAGE
         return {
             id: booking.id,
+            userId: booking.userId,
             type: booking.type,
             storageType: booking.storageType,
             rentalPlan: booking.rentalPlan,
@@ -118,50 +116,93 @@ export class BookingService {
         };
     }
 
-
-
-    /**
-     * Get all bookings or filter by service type
-     */
+    // Admin: Get all bookings
     async findAll(service?: ServiceType) {
         if (service) {
             const bookings = await (this.prisma as any).booking.findMany({
                 where: { type: service },
                 orderBy: { createdAt: 'desc' },
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            phone: true,
+                        },
+                    },
+                },
             });
             return bookings;
         }
 
-        // Return all bookings if no filter provided
         const bookings = await (this.prisma as any).booking.findMany({
             orderBy: { createdAt: 'desc' },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phone: true,
+                    },
+                },
+            },
         });
         return bookings;
     }
 
-    /**
-     * Get a single booking by ID
-     */
-    async findOne(id: string) {
+    // User: Get their own bookings
+    async findByUserId(userId: number, service?: ServiceType) {
+        const whereClause: any = { userId };
+
+        if (service) {
+            whereClause.type = service;
+        }
+
+        const bookings = await (this.prisma as any).booking.findMany({
+            where: whereClause,
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return bookings;
+    }
+
+    async findOne(id: string, userId?: number, isAdmin: boolean = false) {
         const booking = await (this.prisma as any).booking.findUnique({
             where: { id },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phone: true,
+                    },
+                },
+            },
         });
 
         if (!booking) {
-            throw new NotFoundException(`Booking with ID ${id} not found`);
+            throw new NotFoundException(`Booking not found for this user`);
+        }
+
+        // If not admin, check if booking belongs to user
+        if (!isAdmin && userId && booking.userId !== userId) {
+            throw new ForbiddenException('You do not have access to this booking');
         }
 
         return booking;
     }
 
-    /**
-     * Delete a booking and send cancellation email
-     */
-    async remove(id: string) {
-        // Check if booking exists
-        const booking = await this.findOne(id);
+    async remove(id: string, userId?: number, isAdmin: boolean = false) {
+        const booking = await this.findOne(id, userId, isAdmin);
 
-        // Prepare booking details for email
+        // If not admin, verify ownership
+        if (!isAdmin && userId && booking.userId !== userId) {
+            throw new ForbiddenException('You cannot delete this booking');
+        }
+
         let bookingDetails: string;
         let serviceType: string;
 
@@ -188,25 +229,15 @@ export class BookingService {
             serviceType = 'STORAGE';
         }
 
-        // Delete the booking
         await (this.prisma as any).booking.delete({
             where: { id },
         });
 
         this.logger.log(`Booking deleted with ID: ${id}`, {
             bookingId: id,
+            userId: booking.userId,
             type: booking.type,
         });
-
-        // Note: Email sending should include user email from authenticated context
-        // For now, we return success message
-        // TODO: Send cancellation email when user email is available
-        // await this.mailService.sendBookingCancellationEmail({
-        //     email: userEmail,
-        //     id: booking.id,
-        //     service: serviceType,
-        //     details: bookingDetails,
-        // });
 
         return {
             message: 'Booking deleted successfully',
@@ -214,9 +245,6 @@ export class BookingService {
         };
     }
 
-    /**
-     * Helper method to determine storage user type from booking
-     */
     private getStorageUserTypeFromBooking(booking: any): string {
         if (booking.isBusiness) return 'Business';
         if (booking.isHometown) return 'Hometown';
@@ -224,9 +252,6 @@ export class BookingService {
         return 'Standard';
     }
 
-    /**
-     * Helper method to determine storage user type from DTO
-     */
     private getStorageUserType(dto: CreateStorageBookingDto): string {
         if (dto.isBusiness) return 'Business';
         if (dto.isHometown) return 'Hometown';
