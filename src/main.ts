@@ -16,6 +16,7 @@ async function bootstrap() {
   const corsOriginString = configService.get<string>(
     'CORS_ORIGIN',
     'http://localhost:3000',
+    'https://e-movers.vercel.app'
   );
 
   // Parse comma-separated origins
