@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OAuth2Client } from 'google-auth-library';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 export interface GoogleTokenPayload {
   email: string;
@@ -10,51 +11,63 @@ export interface GoogleTokenPayload {
   given_name?: string;
   family_name?: string;
   locale?: string;
-  sub: string; // Google user ID
+  sub: string;
 }
 
 @Injectable()
 export class GoogleAuthService {
-  private client: OAuth2Client;
-
-  constructor(private configService: ConfigService) {
-    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
-    if (!clientId) {
-      throw new Error('GOOGLE_CLIENT_ID is not configured');
-    }
-    this.client = new OAuth2Client(clientId);
-  }
+  constructor(
+    private configService: ConfigService,
+    private httpService: HttpService,
+  ) {}
 
   async verifyToken(token: string): Promise<GoogleTokenPayload> {
     try {
-      const ticket = await this.client.verifyIdToken({
-        idToken: token,
-        audience: this.configService.get<string>('GOOGLE_CLIENT_ID'),
-      });
+      // Call Google's OAuth2 API to verify the token
+      const response = await firstValueFrom(
+        this.httpService.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      );
 
-      const payload = ticket.getPayload();
+      const googleUser = response.data;
 
-      if (!payload) {
-        throw new UnauthorizedException('Invalid Google token');
+      // Validate required fields
+      if (!googleUser.email) {
+        throw new UnauthorizedException(
+          'Google account does not have a valid email',
+        );
       }
 
-      if (!payload.email_verified) {
+      // Optional: Check if email is verified
+      if (!googleUser.email_verified) {
         throw new UnauthorizedException('Google email not verified');
       }
 
       return {
-        email: payload.email!,
-        email_verified: payload.email_verified,
-        name: payload.name!,
-        picture: payload.picture!,
-        given_name: payload.given_name,
-        family_name: payload.family_name,
-        locale: payload.locale,
-        sub: payload.sub,
+        email: googleUser.email,
+        email_verified: googleUser.email_verified,
+        name: googleUser.name || 'Unknown',
+        picture: googleUser.picture || '',
+        given_name: googleUser.given_name,
+        family_name: googleUser.family_name,
+        locale: googleUser.locale,
+        sub: googleUser.sub,
       };
     } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      // Handle HTTP errors from Google API
+      if (error.response?.status === 401 || error.response?.status === 400) {
+        throw new UnauthorizedException('Invalid or expired Google token');
+      }
+
       throw new UnauthorizedException(
-        `Failed to verify Google token: ${error.message}`
+        `Failed to verify Google token: ${error.message}`,
       );
     }
   }

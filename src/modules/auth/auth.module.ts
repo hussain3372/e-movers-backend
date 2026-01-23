@@ -11,10 +11,12 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { GoogleAuthService } from './googleAuth.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
     PrismaModule,
+    HttpModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
