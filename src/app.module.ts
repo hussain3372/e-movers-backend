@@ -16,6 +16,7 @@ import { ServiceLocationsModule } from './modules/servicelocations/service-locat
 import { PostersModule } from './modules/posters/posters.module';
 import { UserManagementModule } from './modules/usermanagement/user-management.module';
 import { StorageSizeModule } from './modules/storage-size/storage-size.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { StorageSizeModule } from './modules/storage-size/storage-size.module';
     MailModule,
     AuditModule,
     StorageModule,
+    DashboardModule,
     S3Module,
     ProfileModule,
     MovingServiceModule,

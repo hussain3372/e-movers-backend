@@ -1,18 +1,24 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsNumber,
+  Min,
+} from 'class-validator';
 
 export class CreateStorageFeatureDto {
-    @IsString()
-    optionId: string;
+  @IsString()
+  optionId: string;
 
-    @IsString()
-    feature: string;
+  @IsString()
+  feature: string;
 
-    @IsOptional()
-    @IsBoolean()
-    isActive?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 
-    @IsOptional()
-    @IsNumber()
-    @Min(0)
-    displayOrder?: number;
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  displayOrder?: number;
 }

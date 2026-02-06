@@ -41,34 +41,34 @@ export class BookingController {
     return this.bookingService.create(createBookingDto, userId);
   }
 
-  //   @Get('admin')
-  //   async findAll(@Query('service') service?: string) {
-  //     if (service) {
-  //       if (!['MOVING', 'STORAGE'].includes(service.toUpperCase())) {
-  //         throw new BadRequestException(
-  //           'Invalid service type. Must be MOVING or STORAGE',
-  //         );
-  //       }
+  @Get('admin')
+  async findAll(@Query('service') service?: string) {
+    if (service) {
+      if (!['MOVING', 'STORAGE'].includes(service.toUpperCase())) {
+        throw new BadRequestException(
+          'Invalid service type. Must be MOVING or STORAGE',
+        );
+      }
 
-  //       const data = await this.bookingService.findAll(
-  //         service.toUpperCase() as ServiceType,
-  //       );
+      const data = await this.bookingService.findAll(
+        service.toUpperCase() as ServiceType,
+      );
 
-  //       return {
-  //         data,
-  //         status: 'success',
-  //         message: 'Booking list retrieved successfully',
-  //       };
-  //     }
+      return {
+        data,
+        status: 'success',
+        message: 'Booking list retrieved successfully',
+      };
+    }
 
-  //     const data = await this.bookingService.findAll();
+    const data = await this.bookingService.findAll();
 
-  //     return {
-  //       data,
-  //       status: 'success',
-  //       message: 'Booking list retrieved successfully',
-  //     };
-  //   }
+    return {
+      data,
+      status: 'success',
+      message: 'Booking list retrieved successfully',
+    };
+  }
 
   @Get()
   async getBookings(@Req() req: any, @Query('service') service?: string) {
