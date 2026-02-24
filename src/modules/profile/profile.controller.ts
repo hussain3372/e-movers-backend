@@ -20,11 +20,11 @@ import { ProfileService } from './profile.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Controller('profile')
-@UseGuards(JwtAuthGuard)
 export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async getProfile(@CurrentUser() user: CurrentUserType) {
     const profile = await this.profileService.getProfile(user.id);
@@ -36,14 +36,15 @@ export class ProfileController {
   }
 
   @Put()
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async updateProfile(
     @CurrentUser() user: CurrentUserType,
-    @Body() dto: UpdateProfileDto
+    @Body() dto: UpdateProfileDto,
   ) {
     const updatedProfile = await this.profileService.updateProfile(
       user.id,
-      dto
+      dto,
     );
     return {
       status: 'success',
@@ -53,11 +54,12 @@ export class ProfileController {
   }
 
   @Post('picture')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
   async uploadProfilePicture(
     @CurrentUser() user: CurrentUserType,
-    @UploadedFile() file: Express.Multer.File
+    @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) {
       throw new BadRequestException('No file provided');
@@ -67,7 +69,7 @@ export class ProfileController {
       user.id,
       file,
       user.email,
-      user.role
+      user.role,
     );
 
     return {
@@ -78,10 +80,11 @@ export class ProfileController {
   }
 
   @Delete('picture')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async deleteProfilePicture(@CurrentUser() user: CurrentUserType) {
     const updatedProfile = await this.profileService.deleteProfilePicture(
-      user.id
+      user.id,
     );
     return {
       status: 'success',
@@ -90,6 +93,7 @@ export class ProfileController {
     };
   }
 
+  // ✅ Public endpoint (No JwtAuthGuard)
   @Delete()
   @HttpCode(HttpStatus.OK)
   async deleteProfile(@CurrentUser() user: CurrentUserType) {
