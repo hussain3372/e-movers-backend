@@ -10,12 +10,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 3001);
+  const port = configService.get<number>('PORT', 3004);
 
   // ✅ Get CORS origins from environment
   const corsOriginString = configService.get<string>(
     'CORS_ORIGIN',
-    'https://e-movers.vercel.app',
+    'http://localhost:3000',
   );
 
   // Parse comma-separated origins
