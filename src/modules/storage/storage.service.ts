@@ -35,6 +35,18 @@ function stackOf(error: unknown): string | undefined {
   return error instanceof Error ? error.stack : undefined;
 }
 
+/**
+ * The Cloudinary SDK rejects with a plain object carrying the real diagnosis
+ * (http_code, provider message). The provider wraps that as `cause`, so unwrap
+ * it for the log rather than losing it.
+ */
+function describeCause(error: unknown): unknown {
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (!cause) return undefined;
+  if (cause instanceof Error) return cause.message;
+  return cause;
+}
+
 @Injectable()
 export class StorageService {
   private readonly defaultValidation: FileValidationOptions = {
@@ -59,7 +71,19 @@ export class StorageService {
   ): Promise<FileUploadResult> {
     const validation = { ...this.defaultValidation, ...validationOptions };
 
-    this.validateFile(file, validation);
+    // Rejecting a file is the caller's mistake, so it is logged separately
+    // from a genuine transfer failure — but it *is* logged, rather than
+    // silently 400ing with no trace.
+    try {
+      this.validateFile(file, validation);
+    } catch (error) {
+      this.logUploadFailure(error, file, folder, 'rejected', {
+        userId,
+        userEmail,
+        userRole,
+      });
+      throw error;
+    }
 
     const fileName = this.buildFileName(file.originalname);
 
@@ -112,13 +136,52 @@ export class StorageService {
 
       return uploadResult;
     } catch (error) {
-      this.logger.error(
-        `File upload failed: ${file.originalname}`,
-        stackOf(error),
-        'StorageService',
-        { userId, folder },
-      );
+      this.logUploadFailure(error, file, folder, 'failed', {
+        userId,
+        userEmail,
+        userRole,
+      });
       throw error;
+    }
+  }
+
+  /**
+   * Record why an upload failed, with enough detail to diagnose it from the
+   * log alone: which file, which folder, who uploaded it, and the underlying
+   * provider error.
+   *
+   * `rejected` means the file failed our own validation — the caller's
+   * mistake, logged at `warn`. `failed` means the transfer itself broke, which
+   * is a real fault and is logged at `error` so it reaches logs/error.log.
+   * The distinction cannot be made from the exception type, because the
+   * provider also surfaces Cloudinary faults as BadRequestException.
+   */
+  private logUploadFailure(
+    error: unknown,
+    file: UploadableFile,
+    folder: string,
+    kind: 'rejected' | 'failed',
+    actor: { userId?: string; userEmail?: string; userRole?: string },
+  ): void {
+    const reason = error instanceof Error ? error.message : String(error);
+    const verb = kind === 'rejected' ? 'rejected' : 'failed';
+    const label =
+      `File upload ${verb}: ${file.originalname} ` +
+      `(${file.mimetype}, ${file.buffer?.length ?? 0} bytes) -> ${folder}: ${reason}`;
+
+    const context = {
+      ...actor,
+      folder,
+      fileName: file.originalname,
+      contentType: file.mimetype,
+      fileSize: file.buffer?.length,
+      metadata: { cause: describeCause(error) },
+    };
+
+    if (kind === 'rejected') {
+      this.logger.warn(label, 'StorageService', context);
+    } else {
+      this.logger.error(label, stackOf(error), 'StorageService', context);
     }
   }
 

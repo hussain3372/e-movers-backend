@@ -138,12 +138,24 @@ export class CloudinaryStorageProvider implements IStorageProvider {
     } catch (error) {
       const reason = this.reasonFor(error);
       this.logger.error(
-        `Failed to upload file: ${folder}/${options.fileName}`,
+        `Failed to upload file: ${folder}/${options.fileName} — ${reason}`,
         this.stackFor(error),
         'CloudinaryStorageProvider',
-        { folder, fileName: options.fileName },
+        {
+          folder,
+          fileName: options.fileName,
+          contentType: options.contentType,
+          resourceType,
+          metadata: this.diagnosisFor(error),
+        },
       );
-      throw new BadRequestException(`Failed to upload file: ${reason}`);
+      // Keep the provider's own diagnosis attached for callers that log it.
+      // `description` must be passed explicitly, otherwise supplying options
+      // drops the `error` field from the JSON response body.
+      throw new BadRequestException(`Failed to upload file: ${reason}`, {
+        cause: error,
+        description: 'Bad Request',
+      });
     }
   }
 
@@ -372,6 +384,26 @@ export class CloudinaryStorageProvider implements IStorageProvider {
   private isNotFound(error: unknown): boolean {
     const err = error as { http_code?: number; error?: { http_code?: number } };
     return err?.http_code === 404 || err?.error?.http_code === 404;
+  }
+
+  /**
+   * Cloudinary reports the actionable part of a failure (invalid signature,
+   * quota exceeded, file too large) via http_code and a nested message. Pull
+   * those out so the log says *why*, not just "upload failed".
+   */
+  private diagnosisFor(error: unknown): Record<string, unknown> {
+    const raw = error instanceof Error && error.cause ? error.cause : error;
+    const err = raw as {
+      name?: string;
+      http_code?: number;
+      error?: { message?: string; http_code?: number };
+    };
+
+    return {
+      cloudinaryHttpCode: err?.http_code ?? err?.error?.http_code,
+      cloudinaryMessage: err?.error?.message,
+      errorName: err?.name,
+    };
   }
 
   private reasonFor(error: unknown): string {

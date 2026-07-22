@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { LoggerModule } from './common/logger/logger.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -24,6 +27,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    LoggerModule,
     AuthModule,
     PrismaModule,
     RedisModule,
@@ -41,6 +45,13 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     StorageSizeModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Logs every failed request; response bodies are unchanged.
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+  ],
 })
 export class AppModule {}
