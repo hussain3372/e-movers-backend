@@ -26,8 +26,10 @@ export interface LogContext {
   applicationId?: string;
   certificationId?: string;
   folder?: string;
-  bucket?: string;
   key?: string;
+  fileName?: string;
+  resourceType?: string;
+  outcome?: string;
   operation?: string;
   prefix?: string;
   expiresIn?: number;

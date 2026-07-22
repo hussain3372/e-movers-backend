@@ -223,14 +223,12 @@ export class MovingServiceService {
     return { message: 'Service deleted successfully', id };
   }
 
+  /** Resolve a stored Cloudinary URL to its public id. */
   private extractKeyFromUrl(url: string): string | null {
-    try {
-      const urlObj = new URL(url);
-      const key = urlObj.pathname.substring(1);
-      return key || null;
-    } catch (error) {
-      this.logger.error(`Failed to extract key from URL: ${url}`, error);
-      return null;
+    const key = this.storage.extractKeyFromUrl(url);
+    if (!key) {
+      this.logger.warn(`Failed to extract key from URL: ${url}`);
     }
+    return key;
   }
 }

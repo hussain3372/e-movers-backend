@@ -2,6 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
+import {
+  renderEmail,
+  emailButton,
+  emailDetails,
+  emailNotice,
+  emailCode,
+  emailParagraph,
+  esc,
+} from './mail-template';
 
 @Injectable()
 export class MailService {
@@ -152,22 +161,25 @@ export class MailService {
       'http://localhost:3000',
     )}/verify-email?token=${token}`;
 
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>Hello ${firstName || ''},</h2>
-      <p>Thank you for registering with the E House Movers Platform.</p>
-      <p>Please verify your email address by clicking the button below:</p>
-      <div style="margin: 20px 0;">
-        <a href="${verifyUrl}" 
-           style="background-color: #3b82f6; color: white; padding: 12px 24px; 
-                  text-decoration: none; border-radius: 6px; display: inline-block;">
-          Verify Email Address
-        </a>
-      </div>
-      <p>If you didn’t create an account, you can safely ignore this email.</p>
-      <p>Best regards,<br>E House Movers Team</p>
-    </div>
-  `;
+    const html = renderEmail({
+      preheader:
+        'Confirm your email address to activate your E-Movers account.',
+      eyebrow: 'Account Verification',
+      title: 'Verify your email address',
+      greeting: firstName ? `Hello ${firstName},` : 'Hello,',
+      body: [
+        emailParagraph(
+          'Thank you for registering with E-Movers. Please confirm your email address to activate your account.',
+        ),
+        emailButton('Verify Email Address', verifyUrl),
+        emailParagraph(
+          `If the button doesn't work, copy and paste this link into your browser:<br><a href="${verifyUrl}" style="color:#9E1B1B;word-break:break-all;">${esc(verifyUrl)}</a>`,
+        ),
+        emailParagraph(
+          "If you didn't create an account, you can safely ignore this email.",
+        ),
+      ].join(''),
+    });
 
     // Debug logs
     console.log('🔹 Preparing to send verification email...');
@@ -204,22 +216,19 @@ export class MailService {
   ): Promise<boolean> {
     const subject = 'Your Email Verification Code';
 
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>Hello ${firstName || ''},</h2>
-      <p>Your email verification code is:</p>
-
-      <div style="font-size: 28px; font-weight: bold; letter-spacing: 6px; 
-                  background: #f3f4f6; padding: 12px; text-align: center;">
-        ${otp}
-      </div>
-
-      <p>This code will expire in <strong>10 minutes</strong>.</p>
-      <p>If you did not create this account, please ignore this email.</p>
-
-      <p>Best regards,<br/>E House Movers Team</p>
-    </div>
-  `;
+    const html = renderEmail({
+      preheader: `Your E-Movers verification code is ${otp}.`,
+      eyebrow: 'Account Verification',
+      title: 'Your verification code',
+      greeting: firstName ? `Hello ${firstName},` : 'Hello,',
+      body: [
+        emailParagraph('Use the code below to verify your email address.'),
+        emailCode(otp, 'This code expires in 10 minutes'),
+        emailParagraph(
+          'If you did not create this account, please ignore this email.',
+        ),
+      ].join(''),
+    });
 
     try {
       await this.sendMail({
@@ -236,15 +245,29 @@ export class MailService {
 
   // Template methods for common emails
   async sendWelcomeEmail(email: string, firstName: string): Promise<boolean> {
-    const subject = 'Welcome to E-movers Company!';
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>Welcome ${firstName}!</h2>
-      <p>We are excited to have you on board at the E-movers Company.</p>
-      <p>If you have any questions, our support team is here to help.</p>
-      <p style="margin-top: 30px;">Best regards,<br>E-movers Team</p>
-    </div>
-  `;
+    const subject = 'Welcome to E-Movers!';
+    const html = renderEmail({
+      preheader: 'Your E-Movers account is ready. Moving, made simple.',
+      eyebrow: 'Welcome Aboard',
+      title: `Welcome to E-Movers, ${firstName}!`,
+      body: [
+        emailParagraph(
+          'We are delighted to have you with us. Since 2003, E-Movers has had a single goal: to make moving a simple and seamless experience.',
+        ),
+        emailDetails(
+          [
+            { label: 'Vehicles', value: '100+' },
+            { label: 'Moves a day', value: '35+' },
+            { label: 'Years in business', value: '20+' },
+            { label: 'Customer satisfaction', value: '97%' },
+          ],
+          'Why customers choose us',
+        ),
+        emailParagraph(
+          'If you have any questions, our support team is always happy to help.',
+        ),
+      ].join(''),
+    });
 
     return this.sendMail({ to: email, subject, html });
   }
@@ -271,21 +294,25 @@ export class MailService {
     // ✅ Build reset URL dynamically
     const resetUrl = `${baseUrl}${rolePrefix}/auth/reset-password?token=${resetToken}`;
 
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>Password Reset Request</h2>
-      <p>You have requested to reset your password.</p>
-      <p>Please click the link below to reset your password:</p>
-      <div style="margin: 20px 0;">
-        <a href="${resetUrl}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-          Reset Password
-        </a>
-      </div>
-      <p>This link will expire in 1 hour.</p>
-      <p>If you did not request this reset, please ignore this email.</p>
-      <p>Best regards,<br>E House Movers Team</p>
-    </div>
-  `;
+    const html = renderEmail({
+      preheader: 'Reset your E-Movers password. This link expires in 1 hour.',
+      eyebrow: 'Account Security',
+      title: 'Reset your password',
+      body: [
+        emailParagraph(
+          'We received a request to reset the password for your account. Click the button below to choose a new one.',
+        ),
+        emailButton('Reset Password', resetUrl),
+        emailNotice(
+          'This link will expire in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email — your password will remain unchanged.',
+          'warning',
+          'Security notice',
+        ),
+        emailParagraph(
+          `If the button doesn't work, copy and paste this link into your browser:<br><a href="${resetUrl}" style="color:#9E1B1B;word-break:break-all;">${esc(resetUrl)}</a>`,
+        ),
+      ].join(''),
+    });
 
     return this.sendMail({ to: email, subject, html });
   }
@@ -295,22 +322,37 @@ export class MailService {
     firstName: string,
     temporaryPassword: string,
   ): Promise<void> {
-    const subject = 'Welcome to Admin Panel';
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>Welcome to the Admin Panel!</h2>
-      <p>Hi ${firstName},</p>
-      <p>You have been added as an administrator. Here are your login credentials:</p>
-      <div style="background-color: #f5f5f5; padding: 20px; margin: 20px 0; border-left: 4px solid #4CAF50;">
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Temporary Password:</strong> ${temporaryPassword}</p>
-      </div>
-      <p><strong>Important:</strong> Please change your password after your first login for security purposes.</p>
-      <p>You can login at: <a href="${process.env.FRONTEND_URL}/admin/login">Admin Login</a></p>
-      <br>
-      <p>Best regards,<br>Your Team</p>
-    </div>
-  `;
+    const subject = 'Welcome to the E-Movers Admin Panel';
+    const baseUrl = this.configService.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:3000',
+    );
+    const loginUrl = `${baseUrl}/admin/login`;
+
+    const html = renderEmail({
+      preheader: 'Your E-Movers administrator account is ready.',
+      eyebrow: 'Administrator Access',
+      title: 'Welcome to the Admin Panel',
+      greeting: `Hi ${firstName},`,
+      body: [
+        emailParagraph(
+          'You have been added as an administrator. Use the credentials below to sign in for the first time.',
+        ),
+        emailDetails(
+          [
+            { label: 'Email', value: email },
+            { label: 'Temporary password', value: temporaryPassword },
+          ],
+          'Your login credentials',
+        ),
+        emailNotice(
+          'For your security, please change this temporary password immediately after your first login and do not share it with anyone.',
+          'warning',
+          'Important',
+        ),
+        emailButton('Go to Admin Login', loginUrl),
+      ].join(''),
+    });
 
     await this.sendMail({ to: email, subject, html });
   }
@@ -321,22 +363,29 @@ export class MailService {
     newAdminData: { name: string; email: string; addedBy: string },
   ): Promise<void> {
     const subject = 'New Admin Added - Notification';
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>New Admin Added</h2>
-      <p>Hi ${firstName},</p>
-      <p>This is to inform you that a new administrator has been added to the system.</p>
-      <div style="background-color: #f5f5f5; padding: 20px; margin: 20px 0; border-left: 4px solid #2196F3;">
-        <p><strong>Admin Name:</strong> ${newAdminData.name}</p>
-        <p><strong>Admin Email:</strong> ${newAdminData.email}</p>
-        <p><strong>Added By:</strong> ${newAdminData.addedBy}</p>
-        <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-      </div>
-      <p>This is an automated notification for your attention.</p>
-      <br>
-      <p>Best regards,<br>System Administrator</p>
-    </div>
-  `;
+    const html = renderEmail({
+      preheader: `${newAdminData.name} was added as an administrator.`,
+      eyebrow: 'System Notification',
+      title: 'A new administrator was added',
+      greeting: `Hi ${firstName},`,
+      body: [
+        emailParagraph(
+          'This is to inform you that a new administrator has been added to the system.',
+        ),
+        emailDetails(
+          [
+            { label: 'Admin name', value: newAdminData.name },
+            { label: 'Admin email', value: newAdminData.email },
+            { label: 'Added by', value: newAdminData.addedBy },
+            { label: 'Date', value: new Date().toLocaleString() },
+          ],
+          'Account details',
+        ),
+        emailParagraph(
+          'If you did not expect this change, please review the administrator list right away.',
+        ),
+      ].join(''),
+    });
 
     await this.sendMail({ to: email, subject, html });
   }
@@ -347,22 +396,31 @@ export class MailService {
     deletedAdminData: { name: string; email: string; deletedBy: string },
   ): Promise<void> {
     const subject = 'Admin Account Deleted - Notification';
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>Admin Account Deleted</h2>
-      <p>Hi ${firstName},</p>
-      <p>This is to inform you that an administrator account has been deleted from the system.</p>
-      <div style="background-color: #fff3cd; padding: 20px; margin: 20px 0; border-left: 4px solid #ff9800;">
-        <p><strong>Admin Name:</strong> ${deletedAdminData.name}</p>
-        <p><strong>Admin Email:</strong> ${deletedAdminData.email}</p>
-        <p><strong>Deleted By:</strong> ${deletedAdminData.deletedBy}</p>
-        <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-      </div>
-      <p>This is an automated notification for your attention.</p>
-      <br>
-      <p>Best regards,<br>System Administrator</p>
-    </div>
-  `;
+    const html = renderEmail({
+      preheader: `${deletedAdminData.name}'s administrator account was deleted.`,
+      eyebrow: 'System Notification',
+      title: 'An administrator account was deleted',
+      greeting: `Hi ${firstName},`,
+      body: [
+        emailParagraph(
+          'This is to inform you that an administrator account has been deleted from the system.',
+        ),
+        emailDetails(
+          [
+            { label: 'Admin name', value: deletedAdminData.name },
+            { label: 'Admin email', value: deletedAdminData.email },
+            { label: 'Deleted by', value: deletedAdminData.deletedBy },
+            { label: 'Date', value: new Date().toLocaleString() },
+          ],
+          'Removed account',
+        ),
+        emailNotice(
+          'If you did not authorise this deletion, please contact your system administrator immediately.',
+          'warning',
+          'Action may be required',
+        ),
+      ].join(''),
+    });
 
     await this.sendMail({ to: email, subject, html });
   }
@@ -374,23 +432,35 @@ export class MailService {
     badgeSerial: string,
   ): Promise<boolean> {
     const subject = 'Certification Approved - Digital Badge Ready';
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Congratulations ${hostName}!</h2>
-        <p>Your certification application for <strong>${propertyName}</strong> has been approved.</p>
-        <p>Your digital badge is now ready for download:</p>
-        <ul>
-          <li>Badge Serial: ${badgeSerial}</li>
-          <li>Status: Active</li>
-        </ul>
-        <div style="margin: 20px 0;">
-          <a href="#" style="background-color: #EFFC76; color: black; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-            Download Badge
-          </a>
-        </div>
-        <p>Best regards,<br>E House Movers Team</p>
-      </div>
-    `;
+    const badgeUrl = `${this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000')}/certifications/${badgeSerial}`;
+
+    const html = renderEmail({
+      preheader: `Your certification for ${propertyName} has been approved.`,
+      eyebrow: 'Certification Approved',
+      title: `Congratulations, ${hostName}!`,
+      body: [
+        emailParagraph(
+          `Your certification application for <strong>${esc(propertyName)}</strong> has been approved, and your digital badge is ready.`,
+        ),
+        emailDetails(
+          [
+            { label: 'Property', value: propertyName },
+            { label: 'Badge serial', value: badgeSerial },
+            {
+              label: 'Status',
+              value:
+                '<span style="color:#2E7D32;font-weight:bold;">ACTIVE</span>',
+              html: true,
+            },
+          ],
+          'Badge details',
+        ),
+        emailButton('Download Your Badge', badgeUrl),
+        emailParagraph(
+          'Display your badge on your listing to show guests that your property is verified.',
+        ),
+      ].join(''),
+    });
 
     return this.sendMail({ to: email, subject, html });
   }
@@ -402,25 +472,24 @@ export class MailService {
     reviewNotes: string,
   ): Promise<boolean> {
     const subject = 'Certification Application Update';
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Application Update</h2>
-        <p>Dear ${hostName},</p>
-        <p>Thank you for submitting your certification application for <strong>${propertyName}</strong>.</p>
-        <p>After careful review, we need some additional information to complete your certification:</p>
-        <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0;">
-          <strong>Review Notes:</strong><br>
-          ${reviewNotes}
-        </div>
-        <p>Please update your application and resubmit for review.</p>
-        <div style="margin: 20px 0;">
-          <a href="#" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-            Update Application
-          </a>
-        </div>
-        <p>Best regards,<br>E House Movers Team</p>
-      </div>
-    `;
+    const applicationUrl = `${this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000')}/certifications`;
+
+    const html = renderEmail({
+      preheader: `We need a little more information for ${propertyName}.`,
+      eyebrow: 'Application Update',
+      title: 'We need a bit more information',
+      greeting: `Dear ${hostName},`,
+      body: [
+        emailParagraph(
+          `Thank you for submitting your certification application for <strong>${esc(propertyName)}</strong>. After careful review, we need some additional information before we can complete your certification.`,
+        ),
+        emailNotice(esc(reviewNotes), 'warning', 'Reviewer notes'),
+        emailParagraph(
+          'Please update your application with the details above and resubmit it for review.',
+        ),
+        emailButton('Update Application', applicationUrl),
+      ].join(''),
+    });
 
     return this.sendMail({ to: email, subject, html });
   }
@@ -432,20 +501,30 @@ export class MailService {
     daysUntilExpiry: number,
   ): Promise<boolean> {
     const subject = `Certification Expiring Soon - ${daysUntilExpiry} Days Remaining`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Certification Renewal Reminder</h2>
-        <p>Dear ${hostName},</p>
-        <p>Your certification for <strong>${propertyName}</strong> will expire in <strong>${daysUntilExpiry} days</strong>.</p>
-        <p>To maintain your verified status, please renew your certification before the expiry date.</p>
-        <div style="margin: 20px 0;">
-          <a href="#" style="background-color: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-            Renew Certification
-          </a>
-        </div>
-        <p>Best regards,<br>E House Movers Team</p>
-      </div>
-    `;
+    const renewUrl = `${this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000')}/certifications`;
+
+    const html = renderEmail({
+      preheader: `${propertyName} expires in ${daysUntilExpiry} days. Renew to stay verified.`,
+      eyebrow: 'Renewal Reminder',
+      title: 'Your certification expires soon',
+      greeting: `Dear ${hostName},`,
+      body: [
+        emailParagraph(
+          `Your certification for <strong>${esc(propertyName)}</strong> is approaching its expiry date.`,
+        ),
+        emailDetails(
+          [
+            { label: 'Property', value: propertyName },
+            { label: 'Days remaining', value: String(daysUntilExpiry) },
+          ],
+          'Certification status',
+        ),
+        emailParagraph(
+          'To maintain your verified status without interruption, please renew before the expiry date.',
+        ),
+        emailButton('Renew Certification', renewUrl),
+      ].join(''),
+    });
 
     return this.sendMail({ to: email, subject, html });
   }
@@ -456,52 +535,58 @@ export class MailService {
     propertyName: string,
   ): Promise<boolean> {
     const subject = 'Certification Expired - Action Required';
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Certification Expired</h2>
-        <p>Dear ${hostName},</p>
-        <p>Your certification for <strong>${propertyName}</strong> has expired.</p>
-        <p>Your property has been removed from the public registry. To restore your verified status, please renew your certification immediately.</p>
-        <div style="margin: 20px 0;">
-          <a href="#" style="background-color: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-            Renew Certification
-          </a>
-        </div>
-        <p>Best regards,<br>E House Movers Team</p>
-      </div>
-    `;
+    const renewUrl = `${this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000')}/certifications`;
+
+    const html = renderEmail({
+      preheader: `${propertyName} is no longer certified. Renew to restore your listing.`,
+      eyebrow: 'Action Required',
+      title: 'Your certification has expired',
+      greeting: `Dear ${hostName},`,
+      body: [
+        emailParagraph(
+          `Your certification for <strong>${esc(propertyName)}</strong> has expired.`,
+        ),
+        emailNotice(
+          'Your property has been removed from the public registry and no longer displays a verified badge.',
+          'danger',
+          'What this means',
+        ),
+        emailParagraph(
+          'To restore your verified status, please renew your certification.',
+        ),
+        emailButton('Renew Certification', renewUrl),
+      ].join(''),
+    });
 
     return this.sendMail({ to: email, subject, html });
   }
 
   async sendOTPEmail(to: string, name: string, otp: string) {
-    const mailOptions = {
-      from: `"${process.env.MAIL_FROM_NAME}" <${process.env.MAIL_FROM_ADDRESS}>`,
+    const html = renderEmail({
+      preheader: `Your two-factor authentication code is ${otp}.`,
+      eyebrow: 'Account Security',
+      title: 'Two-factor authentication code',
+      greeting: `Hello ${name},`,
+      body: [
+        emailParagraph(
+          'You requested to enable Two-Factor Authentication (2FA) for your account. Use the code below to continue.',
+        ),
+        emailCode(otp, 'This code expires in 10 minutes'),
+        emailNotice(
+          'If you did not request this code, please ignore this email and review your account security — someone may have your password.',
+          'warning',
+          "Didn't request this?",
+        ),
+      ].join(''),
+    });
+
+    await this.sendMail({
       to,
       subject: 'Your Two-Factor Authentication Code',
-      html: `
-        <div class="container">
-            <div class="header">
-              <h1>Two-Factor Authentication</h1>
-            </div>
-            <div class="content">
-              <p>Hello ${name},</p>
-              <p>You have requested to enable Two-Factor Authentication (2FA) for your account.</p>
-              <p>Please use the following verification code:</p>
-              <div class="otp-code">${otp}</div>
-              <p>This code will expire in <strong>10 minutes</strong>.</p>
-              <p class="warning">⚠️ If you did not request this code, please ignore this email and ensure your account is secure.</p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message, please do not reply to this email.</p>
-              <p>&copy; ${new Date().getFullYear()} Your Company. All rights reserved.</p>
-            </div>
-          </div>
-      `,
+      html,
       text: `Hello ${name},\n\nYour Two-Factor Authentication code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you did not request this code, please ignore this email.`,
-    };
-
-    await this.transporter.sendMail(mailOptions);
+      from: `"${this.configService.get<string>('MAIL_FROM_NAME', 'E-Movers')}" <${this.configService.get<string>('MAIL_FROM_ADDRESS')}>`,
+    });
   }
 
   // Health check
@@ -588,45 +673,26 @@ export class MailService {
 
     const imageSection = data?.imageUrl
       ? `
-      <div style="margin: 20px 0; text-align: center;">
-        <img src="${data.imageUrl}" 
-             alt="${title}" 
-             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-      </div>
-    `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 24px;">
+        <tr>
+          <td align="center">
+            <img src="${esc(data.imageUrl)}" alt="${esc(title)}" width="520" style="display:block;width:100%;max-width:520px;height:auto;border:0;border-radius:4px;" />
+          </td>
+        </tr>
+      </table>`
       : '';
 
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 24px;">📢 New Announcement</h1>
-      </div>
-      
-      <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
-        <p style="color: #374151; font-size: 16px;">Hello ${userName},</p>
-        
-        <h2 style="color: #1f2937; margin-top: 20px; margin-bottom: 15px;">${title}</h2>
-        
-        ${imageSection}
-        
-        <div style="color: #4b5563; line-height: 1.6; margin: 20px 0;">
-          ${description}
-        </div>
-        
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-        
-        <p style="color: #6b7280; font-size: 14px; margin: 20px 0 0 0;">
-          Best regards,<br>
-          <strong>E House Movers Team</strong>
-        </p>
-      </div>
-      
-      <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-        <p>© ${new Date().getFullYear()} E House Movers Platform. All rights reserved.</p>
-        <p>This is an automated email. Please do not reply to this message.</p>
-      </div>
-    </div>
-  `;
+    const html = renderEmail({
+      preheader: title,
+      eyebrow: 'Announcement',
+      title,
+      greeting: `Hello ${userName},`,
+      // `description` is authored in the admin panel and may contain markup.
+      body: [
+        imageSection,
+        `<div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:15px;line-height:24px;color:#333333;">${description}</div>`,
+      ].join(''),
+    });
 
     try {
       return await this.sendMail({
@@ -651,26 +717,34 @@ export class MailService {
   ): Promise<boolean> {
     const subject = 'Payment Confirmed - Certification Application';
 
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #22c55e;">Payment Confirmed ✓</h2>
-      <p>Hello ${hostName},</p>
-      <p>Your payment has been successfully processed.</p>
-      
-      <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <h3 style="margin-top: 0;">Payment Details</h3>
-        <p><strong>Amount:</strong> $${amount.toFixed(2)} ${currency}</p>
-        <p><strong>Application ID:</strong> ${applicationId}</p>
-        <p><strong>Property:</strong> ${propertyName}</p>
-        <p><strong>Transaction ID:</strong> ${transactionId}</p>
-        <p><strong>Status:</strong> <span style="color: #22c55e; font-weight: bold;">COMPLETED</span></p>
-      </div>
-      
-      <p>Your application is now in the submission phase. Our team will review your application and you will receive updates via email.</p>
-      
-      <p style="margin-top: 30px;">Best regards,<br><strong>E House Movers Team</strong></p>
-    </div>
-  `;
+    const html = renderEmail({
+      preheader: `We received your payment of ${amount.toFixed(2)} ${currency}.`,
+      eyebrow: 'Payment Received',
+      title: 'Your payment is confirmed',
+      greeting: `Hello ${hostName},`,
+      body: [
+        emailParagraph('Your payment has been processed successfully.'),
+        emailDetails(
+          [
+            { label: 'Amount', value: `${amount.toFixed(2)} ${currency}` },
+            { label: 'Property', value: propertyName },
+            { label: 'Application ID', value: applicationId },
+            { label: 'Transaction ID', value: transactionId },
+            {
+              label: 'Status',
+              value:
+                '<span style="color:#2E7D32;font-weight:bold;">COMPLETED</span>',
+              html: true,
+            },
+          ],
+          'Payment details',
+        ),
+        emailParagraph(
+          'Your application has moved to the submission phase. Our team will review it and keep you updated by email.',
+        ),
+      ].join(''),
+      footerNote: 'Please keep this email as your receipt.',
+    });
 
     try {
       const result = await this.sendMail({
@@ -698,37 +772,47 @@ export class MailService {
     isCompany: boolean;
     comments?: string;
   }): Promise<void> {
-    const subject = 'New Moving Service Booking Received';
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-        <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">
-          New Moving Service Booking
-        </h2>
-        
-        <div style="margin-top: 20px;">
-          <p style="margin: 10px 0;"><strong>Booking ID:</strong> ${bookingData.id}</p>
-          <p style="margin: 10px 0;"><strong>Service Type:</strong> ${bookingData.serviceType.toUpperCase()}</p>
-          <p style="margin: 10px 0;"><strong>Preferred Date:</strong> ${new Date(
-            bookingData.preferredDate,
-          ).toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}</p>
-          <p style="margin: 10px 0;"><strong>Pickup Location:</strong> ${bookingData.pickupLocation}</p>
-          <p style="margin: 10px 0;"><strong>Drop-off Location:</strong> ${bookingData.dropOffLocation}</p>
-          <p style="margin: 10px 0;"><strong>Client Type:</strong> ${bookingData.isCompany ? 'Company' : 'Individual'}</p>
-          ${bookingData.comments ? `<p style="margin: 10px 0;"><strong>Comments:</strong> ${bookingData.comments}</p>` : ''}
-        </div>
-        
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-          <p style="color: #7f8c8d; font-size: 12px;">
-            This is an automated notification from E-movers Company booking system.
-          </p>
-        </div>
-      </div>
-    `;
+    const subject = 'Your Moving Service Booking is Confirmed';
+    const preferredDate = new Date(
+      bookingData.preferredDate,
+    ).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const html = renderEmail({
+      preheader: `Booking ${bookingData.id} received for ${preferredDate}.`,
+      eyebrow: 'Booking Received',
+      title: 'Your move is booked',
+      body: [
+        emailParagraph(
+          'Thank you for choosing E-Movers. We have received your booking and our team will contact you shortly to confirm the details.',
+        ),
+        emailDetails(
+          [
+            { label: 'Booking ID', value: bookingData.id },
+            {
+              label: 'Service type',
+              value: bookingData.serviceType.toUpperCase(),
+            },
+            { label: 'Preferred date', value: preferredDate },
+            { label: 'Pickup location', value: bookingData.pickupLocation },
+            { label: 'Drop-off location', value: bookingData.dropOffLocation },
+            {
+              label: 'Client type',
+              value: bookingData.isCompany ? 'Company' : 'Individual',
+            },
+          ],
+          'Booking summary',
+        ),
+        bookingData.comments
+          ? emailNotice(esc(bookingData.comments), 'info', 'Your comments')
+          : '',
+        emailParagraph('No mess, no stress — we will take it from here.'),
+      ].join(''),
+    });
 
     await this.sendMail({ to: bookingData.email, subject, html });
   }
@@ -743,30 +827,34 @@ export class MailService {
     userType: string;
     comments?: string;
   }): Promise<void> {
-    const subject = 'New Storage Service Booking Received';
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-        <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">
-          New Storage Service Booking
-        </h2>
-        
-        <div style="margin-top: 20px;">
-          <p style="margin: 10px 0;"><strong>Booking ID:</strong> ${bookingData.id}</p>
-          <p style="margin: 10px 0;"><strong>Storage Type:</strong> ${bookingData.storageType}</p>
-          <p style="margin: 10px 0;"><strong>Rental Plan:</strong> ${bookingData.rentalPlan}</p>
-          <p style="margin: 10px 0;"><strong>Storage Size:</strong> ${bookingData.storageSize}</p>
-          <p style="margin: 10px 0;"><strong>Location:</strong> ${bookingData.location}</p>
-          <p style="margin: 10px 0;"><strong>User Type:</strong> ${bookingData.userType}</p>
-          ${bookingData.comments ? `<p style="margin: 10px 0;"><strong>Comments:</strong> ${bookingData.comments}</p>` : ''}
-        </div>
-        
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-          <p style="color: #7f8c8d; font-size: 12px;">
-            This is an automated notification from E-movers Company booking system.
-          </p>
-        </div>
-      </div>
-    `;
+    const subject = 'Your Storage Booking is Confirmed';
+    const html = renderEmail({
+      preheader: `Storage booking ${bookingData.id} received.`,
+      eyebrow: 'Booking Received',
+      title: 'Your storage is booked',
+      body: [
+        emailParagraph(
+          'Thank you for choosing E-Movers. We have received your storage booking and our team will be in touch shortly to confirm the details.',
+        ),
+        emailDetails(
+          [
+            { label: 'Booking ID', value: bookingData.id },
+            { label: 'Storage type', value: bookingData.storageType },
+            { label: 'Rental plan', value: bookingData.rentalPlan },
+            { label: 'Storage size', value: bookingData.storageSize },
+            { label: 'Location', value: bookingData.location },
+            { label: 'User type', value: bookingData.userType },
+          ],
+          'Booking summary',
+        ),
+        bookingData.comments
+          ? emailNotice(esc(bookingData.comments), 'info', 'Your comments')
+          : '',
+        emailParagraph(
+          'Your belongings will be kept in our 100,000+ sq.ft secure storage facility.',
+        ),
+      ].join(''),
+    });
 
     await this.sendMail({ to: bookingData.email, subject, html });
   }
@@ -778,28 +866,27 @@ export class MailService {
     details: string;
   }): Promise<void> {
     const subject = 'Your Booking has been Cancelled';
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-        <h2 style="color: #e74c3c; border-bottom: 2px solid #e74c3c; padding-bottom: 10px;">
-          Your Booking has been Cancelled
-        </h2>
-        
-        <div style="margin-top: 20px;">
-          <p style="margin: 10px 0;"><strong>Booking ID:</strong> ${bookingData.id}</p>
-          <p style="margin: 10px 0;"><strong>Service Type:</strong> ${bookingData.service}</p>
-          <p style="margin: 10px 0;"><strong>Booking Details:</strong></p>
-          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px;">
-            ${bookingData.details}
-          </div>
-        </div>
-        
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-          <p style="color: #7f8c8d; font-size: 12px;">
-            This booking has been deleted from the system.
-          </p>
-        </div>
-      </div>
-    `;
+    const html = renderEmail({
+      preheader: `Booking ${bookingData.id} has been cancelled.`,
+      eyebrow: 'Booking Cancelled',
+      title: 'Your booking has been cancelled',
+      body: [
+        emailParagraph(
+          'We are writing to confirm that the booking below has been cancelled and removed from our system.',
+        ),
+        emailDetails(
+          [
+            { label: 'Booking ID', value: bookingData.id },
+            { label: 'Service type', value: bookingData.service },
+          ],
+          'Cancelled booking',
+        ),
+        emailNotice(esc(bookingData.details), 'danger', 'Booking details'),
+        emailParagraph(
+          'If this was not intended, or you would like to rebook, please contact our team and we will be glad to help.',
+        ),
+      ].join(''),
+    });
 
     await this.sendMail({ to: bookingData.email, subject, html });
   }

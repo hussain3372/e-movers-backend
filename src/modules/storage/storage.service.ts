@@ -1,12 +1,17 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { S3StorageProvider } from './providers/s3-storage.provider';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { CloudinaryStorageProvider } from './providers/cloudinary-storage.provider';
 import { EnhancedLoggerService } from '../../common/logger/enhanced-logger.service';
 import { AuditService } from '../audit/audit.service';
+import { ResourceType } from './interfaces/storage.interface';
 import * as path from 'path';
 import * as crypto from 'crypto';
 
 export interface FileUploadResult {
+  /** Cloudinary public id — pass this back to `deleteFile`. */
   key: string;
   url: string;
   etag: string;
@@ -21,6 +26,15 @@ export interface FileValidationOptions {
   allowedExtensions?: string[];
 }
 
+type UploadableFile =
+  | Express.Multer.File
+  | { buffer: Buffer; originalname: string; mimetype: string };
+
+/** Catch clauses are untyped; pull a stack out only when there really is one. */
+function stackOf(error: unknown): string | undefined {
+  return error instanceof Error ? error.stack : undefined;
+}
+
 @Injectable()
 export class StorageService {
   private readonly defaultValidation: FileValidationOptions = {
@@ -30,37 +44,29 @@ export class StorageService {
   };
 
   constructor(
-    private s3Provider: S3StorageProvider,
-    private configService: ConfigService,
+    private storageProvider: CloudinaryStorageProvider,
     private logger: EnhancedLoggerService,
     private auditService: AuditService,
   ) {}
 
   async uploadFile(
-    file: Express.Multer.File | { buffer: Buffer; originalname: string; mimetype: string },
+    file: UploadableFile,
     folder: string,
     userId?: string,
     userEmail?: string,
     userRole?: string,
-    validationOptions?: FileValidationOptions
+    validationOptions?: FileValidationOptions,
   ): Promise<FileUploadResult> {
     const validation = { ...this.defaultValidation, ...validationOptions };
-    
-    // Validate file
+
     this.validateFile(file, validation);
 
-    // Generate secure file key
-    const fileExtension = path.extname(file.originalname).toLowerCase();
-    const fileName = path.basename(file.originalname, fileExtension);
-    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const hash = crypto.randomBytes(8).toString('hex');
-    
-    const key = `${folder}/${timestamp}-${hash}-${sanitizedFileName}${fileExtension}`;
+    const fileName = this.buildFileName(file.originalname);
 
     try {
-      const result = await this.s3Provider.upload({
-        key,
+      const result = await this.storageProvider.upload({
+        folder,
+        fileName,
         body: file.buffer,
         contentType: file.mimetype,
         metadata: {
@@ -75,13 +81,12 @@ export class StorageService {
         key: result.key,
         url: result.url,
         etag: result.etag,
-        size: file.buffer.length,
+        size: result.bytes,
         contentType: file.mimetype,
         uploadedAt: new Date(),
       };
 
-      // Log and audit the upload
-      this.logger.logFileOperation('UPLOAD', key, file.buffer.length, {
+      this.logger.logFileOperation('UPLOAD', result.key, result.bytes, {
         userId,
         userEmail,
         userRole,
@@ -92,16 +97,16 @@ export class StorageService {
       if (userId) {
         await this.auditService.auditFileOperation(
           'FILE_UPLOAD',
-          key,
+          result.key,
           userId,
           userEmail || '',
           userRole || 'HOST',
           {
             originalName: file.originalname,
-            size: file.buffer.length,
+            size: result.bytes,
             contentType: file.mimetype,
             folder,
-          }
+          },
         );
       }
 
@@ -109,34 +114,41 @@ export class StorageService {
     } catch (error) {
       this.logger.error(
         `File upload failed: ${file.originalname}`,
-        error.stack,
+        stackOf(error),
         'StorageService',
-        { userId, folder }
+        { userId, folder },
       );
       throw error;
     }
   }
 
   async uploadMultipleFiles(
-    files: (Express.Multer.File | { buffer: Buffer; originalname: string; mimetype: string })[],
+    files: UploadableFile[],
     folder: string,
     userId?: string,
     userEmail?: string,
     userRole?: string,
-    validationOptions?: FileValidationOptions
+    validationOptions?: FileValidationOptions,
   ): Promise<FileUploadResult[]> {
     const results: FileUploadResult[] = [];
-    
+
     for (const file of files) {
       try {
-        const result = await this.uploadFile(file, folder, userId, userEmail, userRole, validationOptions);
+        const result = await this.uploadFile(
+          file,
+          folder,
+          userId,
+          userEmail,
+          userRole,
+          validationOptions,
+        );
         results.push(result);
       } catch (error) {
         this.logger.error(
           `Failed to upload file in batch: ${file.originalname}`,
-          error.stack,
+          stackOf(error),
           'StorageService',
-          { userId, folder }
+          { userId, folder },
         );
         // Continue with other files, but log the failure
       }
@@ -145,10 +157,16 @@ export class StorageService {
     return results;
   }
 
-  async downloadFile(key: string, userId?: string, userEmail?: string, userRole?: string) {
+  async downloadFile(
+    key: string,
+    userId?: string,
+    userEmail?: string,
+    userRole?: string,
+    resourceType?: ResourceType,
+  ) {
     try {
-      const result = await this.s3Provider.download({ key });
-      
+      const result = await this.storageProvider.download(key, resourceType);
+
       this.logger.logFileOperation('DOWNLOAD', key, result.body.length, {
         userId,
         userEmail,
@@ -166,7 +184,7 @@ export class StorageService {
           {
             size: result.body.length,
             contentType: result.contentType,
-          }
+          },
         );
       }
 
@@ -174,29 +192,37 @@ export class StorageService {
     } catch (error) {
       this.logger.error(
         `File download failed: ${key}`,
-        error.stack,
+        stackOf(error),
         'StorageService',
-        { userId }
+        { userId },
       );
       throw new NotFoundException(`File not found: ${key}`);
     }
   }
 
-  async deleteFile(key: string, userId?: string, userEmail?: string, userRole?: string): Promise<void> {
+  /**
+   * Delete an asset. Accepts either a Cloudinary public id or a full
+   * Cloudinary delivery URL.
+   */
+  async deleteFile(
+    key: string,
+    userId?: string,
+    userEmail?: string,
+    userRole?: string,
+    resourceType?: ResourceType,
+  ): Promise<void> {
+    const publicId = this.normalizeKey(key);
+
     try {
-      // Check if file exists first
-      const bucket = this.configService.get<string>('AWS_S3_BUCKET')
-        || this.configService.get<string>('S3_BUCKET_NAME')
-        || 'e-movers-images';
-      const exists = await this.s3Provider.exists(bucket, key);
-      
+      const exists = await this.storageProvider.exists(publicId, resourceType);
+
       if (!exists) {
-        throw new NotFoundException(`File not found: ${key}`);
+        throw new NotFoundException(`File not found: ${publicId}`);
       }
 
-      await this.s3Provider.delete({ key });
-      
-      this.logger.logFileOperation('DELETE', key, undefined, {
+      await this.storageProvider.delete({ key: publicId, resourceType });
+
+      this.logger.logFileOperation('DELETE', publicId, undefined, {
         userId,
         userEmail,
         userRole,
@@ -205,145 +231,113 @@ export class StorageService {
       if (userId) {
         await this.auditService.auditFileOperation(
           'FILE_DELETE',
-          key,
+          publicId,
           userId,
           userEmail || '',
           userRole || 'HOST',
-          {}
+          {},
         );
       }
     } catch (error) {
       this.logger.error(
-        `File deletion failed: ${key}`,
-        error.stack,
+        `File deletion failed: ${publicId}`,
+        stackOf(error),
         'StorageService',
-        { userId }
+        { userId },
       );
       throw error;
     }
   }
 
-  async getPresignedUploadUrl(
-    fileName: string,
-    folder: string,
-    contentType: string,
-    expiresIn: number = 3600,
-    userId?: string
-  ): Promise<{ uploadUrl: string; key: string }> {
-    const fileExtension = path.extname(fileName).toLowerCase();
-    const baseName = path.basename(fileName, fileExtension);
-    const sanitizedFileName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const hash = crypto.randomBytes(8).toString('hex');
-    
-    const key = `${folder}/${timestamp}-${hash}-${sanitizedFileName}${fileExtension}`;
-
-    try {
-      const uploadUrl = await this.s3Provider.getPresignedUrl({
-        key,
-        operation: 'putObject',
-        expiresIn,
-        contentType,
-      });
-
-      this.logger.log(
-        `Generated presigned upload URL: ${key}`,
-        'StorageService',
-        { userId, folder, expiresIn }
-      );
-
-      return { uploadUrl, key };
-    } catch (error) {
-      this.logger.error(
-        `Failed to generate presigned upload URL: ${fileName}`,
-        error.stack,
-        'StorageService',
-        { userId, folder }
-      );
-      throw error;
-    }
-  }
-
-  async getPresignedDownloadUrl(
+  /** Signed, time-limited delivery URL for a private/authenticated asset. */
+  getSignedUrl(
     key: string,
-    expiresIn: number = 3600,
-    userId?: string
-  ): Promise<string> {
-    try {
-      const downloadUrl = await this.s3Provider.getPresignedUrl({
-        key,
-        operation: 'getObject',
-        expiresIn,
-      });
-
-      this.logger.log(
-        `Generated presigned download URL: ${key}`,
-        'StorageService',
-        { userId, expiresIn }
-      );
-
-      return downloadUrl;
-    } catch (error) {
-      this.logger.error(
-        `Failed to generate presigned download URL: ${key}`,
-        error.stack,
-        'StorageService',
-        { userId }
-      );
-      throw error;
-    }
+    expiresIn = 3600,
+    resourceType?: ResourceType,
+  ): string {
+    return this.storageProvider.getSignedUrl(
+      this.normalizeKey(key),
+      expiresIn,
+      resourceType,
+    );
   }
 
-  async listFiles(folder: string, maxFiles: number = 100): Promise<any> {
+  async listFiles(folder: string, maxFiles = 100) {
     try {
-      const result = await this.s3Provider.list({
+      return await this.storageProvider.list({
         prefix: folder,
-        maxKeys: maxFiles,
+        maxResults: maxFiles,
       });
-
-      return result;
     } catch (error) {
       this.logger.error(
         `Failed to list files in folder: ${folder}`,
-        error.stack,
-        'StorageService'
+        stackOf(error),
+        'StorageService',
       );
       throw error;
     }
   }
 
-  async fileExists(key: string): Promise<boolean> {
+  async fileExists(key: string, resourceType?: ResourceType): Promise<boolean> {
     try {
-      const bucket = this.configService.get<string>('AWS_S3_BUCKET');
-      if (!bucket) {
-        throw new Error('AWS_S3_BUCKET is not configured');
-      }
-      return await this.s3Provider.exists(bucket, key);
+      return await this.storageProvider.exists(
+        this.normalizeKey(key),
+        resourceType,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to check file existence: ${key}`,
-        error.stack,
-        'StorageService'
+        stackOf(error),
+        'StorageService',
       );
       return false;
     }
   }
 
+  /**
+   * Resolve a stored Cloudinary URL back to its public id. Returns null when
+   * the value is not a recognisable Cloudinary URL.
+   */
+  extractKeyFromUrl(url: string): string | null {
+    return this.storageProvider.extractKeyFromUrl(url);
+  }
+
+  /** Accept a public id or a full Cloudinary URL and return the public id. */
+  private normalizeKey(keyOrUrl: string): string {
+    if (!/^https?:\/\//i.test(keyOrUrl)) return keyOrUrl;
+    return this.storageProvider.extractKeyFromUrl(keyOrUrl) ?? keyOrUrl;
+  }
+
+  /**
+   * Build a collision-free, Cloudinary-safe public id fragment.
+   * Cloudinary keeps the extension out of the public id for image/video, so
+   * only the base name is used here.
+   */
+  private buildFileName(originalName: string): string {
+    const extension = path.extname(originalName).toLowerCase();
+    const baseName = path.basename(originalName, extension);
+    const sanitized = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const hash = crypto.randomBytes(8).toString('hex');
+
+    return `${timestamp}-${hash}-${sanitized}`;
+  }
+
   private validateFile(
-    file: Express.Multer.File | { buffer: Buffer; originalname: string; mimetype: string },
-    options: FileValidationOptions
+    file: UploadableFile,
+    options: FileValidationOptions,
   ): void {
     // Check file size
     if (options.maxSize && file.buffer.length > options.maxSize) {
       throw new BadRequestException(
-        `File size ${file.buffer.length} bytes exceeds maximum allowed size ${options.maxSize} bytes`
+        `File size ${file.buffer.length} bytes exceeds maximum allowed size ${options.maxSize} bytes`,
       );
     }
 
     // Check MIME type
     if (options.allowedTypes && !options.allowedTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        `File type ${file.mimetype} is not allowed. Allowed types: ${options.allowedTypes.join(', ')}`
+        `File type ${file.mimetype} is not allowed. Allowed types: ${options.allowedTypes.join(', ')}`,
       );
     }
 
@@ -352,7 +346,7 @@ export class StorageService {
       const fileExtension = path.extname(file.originalname).toLowerCase();
       if (!options.allowedExtensions.includes(fileExtension)) {
         throw new BadRequestException(
-          `File extension ${fileExtension} is not allowed. Allowed extensions: ${options.allowedExtensions.join(', ')}`
+          `File extension ${fileExtension} is not allowed. Allowed extensions: ${options.allowedExtensions.join(', ')}`,
         );
       }
     }
@@ -363,7 +357,11 @@ export class StorageService {
     }
 
     // Basic security check - ensure filename doesn't contain path traversal
-    if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+    if (
+      file.originalname.includes('..') ||
+      file.originalname.includes('/') ||
+      file.originalname.includes('\\')
+    ) {
       throw new BadRequestException('Invalid filename');
     }
   }

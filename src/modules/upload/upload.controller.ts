@@ -11,13 +11,15 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { StorageService } from './storage.service';
+import { StorageService } from '../storage/storage.service';
 
 const memoryStorage = multer.memoryStorage();
 
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
-export class S3Controller {
+export class UploadController {
   constructor(private readonly storageService: StorageService) {}
 
   /**
@@ -28,30 +30,45 @@ export class S3Controller {
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('image', {
-      limits: { fileSize: 5 * 1024 * 1024 },
+      limits: { fileSize: MAX_IMAGE_SIZE },
       storage: memoryStorage,
       fileFilter: (req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-          return cb(new BadRequestException('Only image files are allowed!'), false);
+          return cb(
+            new BadRequestException('Only image files are allowed!'),
+            false,
+          );
         }
         cb(null, true);
       },
-    })
+    }),
   )
   async uploadPublicImage(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
-    const normalized = {
-      buffer: file.buffer,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-    };
-
     const result = await this.storageService.uploadFile(
-      normalized,
-      'public/images'
+      {
+        buffer: file.buffer,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+      },
+      'public/images',
+      undefined,
+      undefined,
+      undefined,
+      {
+        maxSize: MAX_IMAGE_SIZE,
+        allowedTypes: [
+          'image/jpeg',
+          'image/jpg',
+          'image/png',
+          'image/gif',
+          'image/webp',
+        ],
+        allowedExtensions: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      },
     );
 
     return {
@@ -60,7 +77,7 @@ export class S3Controller {
       data: {
         url: result.url,
         key: result.key,
-        name: result.name,
+        name: file.originalname,
       },
     };
   }

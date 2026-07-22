@@ -215,12 +215,8 @@ export class PostersService {
     return { message: 'Poster deleted successfully' };
   }
 
+  /** Resolve a stored Cloudinary URL to its public id. */
   private extractKeyFromUrl(url: string): string | null {
-    try {
-      const urlObj = new URL(url);
-      return urlObj.pathname.substring(1); // Remove leading '/'
-    } catch {
-      return null;
-    }
+    return this.storage.extractKeyFromUrl(url);
   }
 }

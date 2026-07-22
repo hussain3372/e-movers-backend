@@ -8,7 +8,7 @@ import { RedisModule } from './redis/redis.module';
 import { MailModule } from './common/mail/mail.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { StorageModule } from './modules/storage/storage.module';
-import { S3Module } from './modules/s3module/s3.module';
+import { UploadModule } from './modules/upload/upload.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { MovingServiceModule } from './modules/movingservice/movingservice.module';
 import { BookingModule } from './modules/bookings/booking.module';
@@ -31,7 +31,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     AuditModule,
     StorageModule,
     DashboardModule,
-    S3Module,
+    UploadModule,
     ProfileModule,
     MovingServiceModule,
     BookingModule,

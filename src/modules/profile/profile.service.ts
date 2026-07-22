@@ -236,16 +236,16 @@ export class ProfileService {
     await this.prisma.user.delete({ where: { id: userId } });
   }
 
+  /**
+   * Resolve a stored Cloudinary URL to its public id, e.g.
+   * https://res.cloudinary.com/<cloud>/image/upload/v17/users/123/profile/x.jpg
+   *   -> users/123/profile/x
+   */
   private extractKeyFromUrl(url: string): string | null {
-    try {
-      // If your storage service returns full URLs like:
-      // https://bucket.s3.region.amazonaws.com/users/123/profile/filename.jpg
-      // Extract the key part: users/123/profile/filename.jpg
-      const urlObj = new URL(url);
-      return urlObj.pathname.substring(1); // Remove leading '/'
-    } catch (error) {
+    const key = this.storageService.extractKeyFromUrl(url);
+    if (!key) {
       this.logger.warn(`Failed to extract key from URL: ${url}`);
-      return null;
     }
+    return key;
   }
 }

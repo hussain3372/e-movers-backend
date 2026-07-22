@@ -1,72 +1,81 @@
-export interface StorageConfig {
-  bucket: string;
-  region?: string;
-  endpoint?: string;
-  accessKeyId?: string;
-  secretAccessKey?: string;
-  forcePathStyle?: boolean;
-}
+/**
+ * Storage abstraction backed by Cloudinary.
+ *
+ * Cloudinary identifies an asset by `publicId` (folder path + name, no file
+ * extension for image/video assets). Throughout this codebase the term "key"
+ * is used interchangeably with Cloudinary's `public_id`.
+ */
+
+export type ResourceType = 'image' | 'video' | 'raw' | 'auto';
 
 export interface UploadOptions {
-  bucket?: string;
-  key: string;
-  body: Buffer | Uint8Array | string;
+  /** Cloudinary folder, e.g. `users/42/profile`. */
+  folder: string;
+  /** File name (without extension) used to build the public id. */
+  fileName: string;
+  body: Buffer;
   contentType?: string;
+  /** Arbitrary key/value pairs stored as Cloudinary context metadata. */
   metadata?: Record<string, string>;
-  acl?: 'private' | 'public-read' | 'public-read-write';
-  expires?: Date;
-  serverSideEncryption?: string;
-  storageClass?: 'STANDARD' | 'REDUCED_REDUNDANCY' | 'STANDARD_IA' | 'ONEZONE_IA' | 'INTELLIGENT_TIERING' | 'GLACIER' | 'DEEP_ARCHIVE';
+  resourceType?: ResourceType;
 }
 
-export interface DownloadOptions {
-  bucket?: string;
+export interface UploadResult {
+  /** Cloudinary `public_id`. */
   key: string;
-  range?: string;
+  /** Cloudinary `secure_url`. */
+  url: string;
+  /** Cloudinary asset version, used in place of an S3 ETag. */
+  etag: string;
+  bytes: number;
+  format?: string;
+  resourceType: ResourceType;
 }
 
 export interface DeleteOptions {
-  bucket?: string;
   key: string;
+  resourceType?: ResourceType;
 }
 
 export interface ListOptions {
-  bucket?: string;
+  /** Public-id prefix, e.g. `posters/`. */
   prefix?: string;
-  maxKeys?: number;
-  continuationToken?: string;
+  maxResults?: number;
+  nextCursor?: string;
+  resourceType?: ResourceType;
 }
 
 export interface StorageObject {
   key: string;
+  url: string;
   size: number;
   lastModified: Date;
-  etag: string;
-  contentType?: string;
-  metadata?: Record<string, string>;
+  format?: string;
 }
 
 export interface ListResult {
   objects: StorageObject[];
   isTruncated: boolean;
-  nextContinuationToken?: string;
+  nextCursor?: string;
 }
 
-export interface PresignedUrlOptions {
-  bucket?: string;
-  key: string;
-  operation: 'getObject' | 'putObject' | 'deleteObject';
-  expiresIn?: number; // seconds
+export interface DownloadResult {
+  body: Buffer;
   contentType?: string;
 }
 
 export interface IStorageProvider {
-  upload(options: UploadOptions): Promise<{ key: string; url: string; etag: string }>;
-  download(options: DownloadOptions): Promise<{ body: Buffer; contentType?: string; metadata?: Record<string, string> }>;
+  upload(options: UploadOptions): Promise<UploadResult>;
+  download(key: string, resourceType?: ResourceType): Promise<DownloadResult>;
   delete(options: DeleteOptions): Promise<void>;
   list(options: ListOptions): Promise<ListResult>;
-  exists(bucket: string, key: string): Promise<boolean>;
-  getPresignedUrl(options: PresignedUrlOptions): Promise<string>;
-  createBucket(bucket: string): Promise<void>;
-  deleteBucket(bucket: string): Promise<void>;
+  exists(key: string, resourceType?: ResourceType): Promise<boolean>;
+  /** Signed, time-limited delivery URL for a private/authenticated asset. */
+  getSignedUrl(
+    key: string,
+    expiresIn?: number,
+    resourceType?: ResourceType,
+  ): string;
+  /** Resolve a Cloudinary delivery URL back to its public id. */
+  extractKeyFromUrl(url: string): string | null;
 }
