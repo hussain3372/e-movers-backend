@@ -24,23 +24,20 @@ export class MailService {
   private initializeTransporter() {
     try {
       const host = this.configService.get<string>('MAIL_HOST');
-      const port = this.configService.get<number>('MAIL_PORT');
-      const encryption = this.configService.get<string>(
-        'MAIL_ENCRYPTION',
-        'ssl',
-      );
+      // ConfigService returns env values as strings, so coerce to a number —
+      // otherwise `port === 465` is always false and the secure flag is wrong.
+      const port = Number(this.configService.get('MAIL_PORT')) || 587;
+      const encryption = (
+        this.configService.get<string>('MAIL_ENCRYPTION', 'ssl') || ''
+      ).toLowerCase();
       const username = this.configService.get<string>('MAIL_USERNAME');
       const password = this.configService.get<string>('MAIL_PASSWORD');
 
-      // Determine secure flag based on port or encryption setting
-      // Port 465 = SSL (secure: true)
-      // Port 587 = TLS/STARTTLS (secure: false)
-      let secure = false;
-      if (port === 465 || encryption?.toLowerCase() === 'ssl') {
-        secure = true;
-      } else if (port === 587 || encryption?.toLowerCase() === 'tls') {
-        secure = false;
-      }
+      // Port 465 uses implicit TLS and MUST set secure=true. Ports 587/25 use
+      // STARTTLS (secure=false). The port is authoritative because providers
+      // (Hostinger among them) loosely label 465 as "TLS"; an explicit
+      // MAIL_ENCRYPTION=ssl can still force implicit TLS on a non-standard port.
+      const secure = port === 465 || encryption === 'ssl';
 
       const smtpConfig: any = {
         host,
@@ -61,11 +58,11 @@ export class MailService {
       smtpConfig.connectionTimeout = 10000; // 10 seconds
       smtpConfig.socketTimeout = 10000; // 10 seconds
 
-      // For TLS connections, allow self-signed certificates if needed (not recommended for production)
-      if (!secure && port === 587) {
-        smtpConfig.tls = {
-          rejectUnauthorized: false, // ⚠️ Only for development; use true in production
-        };
+      // For STARTTLS connections, require STARTTLS support on the server.
+      // Certificate validation is left on — Hostinger and other real providers
+      // present valid certs, so there is no reason to disable it.
+      if (!secure) {
+        smtpConfig.requireTLS = true;
       }
 
       this.transporter = nodemailer.createTransport(smtpConfig);
@@ -615,12 +612,11 @@ export class MailService {
   }> {
     try {
       const host = this.configService.get<string>('MAIL_HOST');
-      const port = this.configService.get<number>('MAIL_PORT');
-      const encryption = this.configService.get<string>(
-        'MAIL_ENCRYPTION',
-        'tls',
-      );
-      const secure = port === 465 || encryption?.toLowerCase() === 'ssl';
+      const port = Number(this.configService.get('MAIL_PORT')) || 587;
+      const encryption = (
+        this.configService.get<string>('MAIL_ENCRYPTION', 'ssl') || ''
+      ).toLowerCase();
+      const secure = port === 465 || encryption === 'ssl';
 
       await this.transporter.verify();
 
@@ -637,12 +633,11 @@ export class MailService {
     } catch (error) {
       const errorMsg = error?.message || JSON.stringify(error);
       const host = this.configService.get<string>('MAIL_HOST');
-      const port = this.configService.get<number>('MAIL_PORT');
-      const encryption = this.configService.get<string>(
-        'MAIL_ENCRYPTION',
-        'tls',
-      );
-      const secure = port === 465 || encryption?.toLowerCase() === 'ssl';
+      const port = Number(this.configService.get('MAIL_PORT')) || 587;
+      const encryption = (
+        this.configService.get<string>('MAIL_ENCRYPTION', 'ssl') || ''
+      ).toLowerCase();
+      const secure = port === 465 || encryption === 'ssl';
 
       this.logger.error(
         `📋 SMTP Connection Diagnostic:`,

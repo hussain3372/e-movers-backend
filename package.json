@@ -19,6 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "verify:cloudinary": "ts-node -T --project scripts/tsconfig.json scripts/verify-cloudinary.ts",
+    "verify:smtp": "ts-node -T --project scripts/tsconfig.json scripts/verify-smtp.ts",
     "db:seed": "prisma db seed"
   },
   "dependencies": {
