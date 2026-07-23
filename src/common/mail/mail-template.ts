@@ -7,8 +7,8 @@
  */
 
 export const BRAND = {
-  name: 'E-Movers',
-  tagline: 'NO MESS NO STRESS',
+  name: 'E House Movers',
+  tagline: 'Moving Made Easy.',
   red: '#9E1B1B',
   redDark: '#7C1414',
   text: '#333333',
